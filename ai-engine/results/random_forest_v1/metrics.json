@@ -1,0 +1,13 @@
+{
+    "model": "Random Forest v1",
+    "dataset": "CICIoT2023",
+    "development_samples": 500000,
+    "training_samples": 400000,
+    "testing_samples": 100000,
+    "number_of_features": 46,
+    "number_of_classes": 34,
+    "accuracy": 0.99073,
+    "macro_f1": 0.732392220501314,
+    "weighted_f1": 0.9898743352475647,
+    "macro_recall": 0.7138518476561143
+}
