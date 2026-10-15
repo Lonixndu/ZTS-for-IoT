@@ -1,0 +1,6 @@
+{
+  "index": { "fields": ["docType", "timestamp", "delta"] },
+  "ddoc": "indexTrustEventDoc",
+  "name": "indexTrustEvent",
+  "type": "json"
+}

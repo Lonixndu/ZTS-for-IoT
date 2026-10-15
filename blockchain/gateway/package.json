@@ -1,0 +1,18 @@
+{
+  "name": "ztiot-gateway",
+  "version": "1.0.0",
+  "description": "Client connector: signs and submits transactions to the ztiot smart contract",
+  "main": "src/server.js",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "1.14.6",
+    "@hyperledger/fabric-gateway": "1.13.0",
+    "dotenv": "16.6.1"
+  }
+}
