@@ -1,0 +1,15 @@
+# never commit keys, secrets or generated folders
+.env
+*.pem
+*_sk
+keystore/
+venv/
+__pycache__/
+node_modules/
+chaincode/ztiot-cc/vendor/
+*.block
+ground_truth*.json
+results/
+.bridge_key
+coverage.out
+coverage.html
