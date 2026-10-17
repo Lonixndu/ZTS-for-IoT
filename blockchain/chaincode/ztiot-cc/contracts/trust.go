@@ -1,27 +1,21 @@
 package contracts
 
 import (
-	"encoding/json"
-	"fmt"
-	"math"
+	"encoding/json" // events are stored as JSON
+	"fmt"           // error messages
+	"math"          // math.Round for rounding to 2 decimals
 
-	"github.com/hyperledger/fabric-contract-api-go/contractapi"
+	"github.com/hyperledger/fabric-contract-api-go/contractapi" // Fabric contract library
 
-	"github.com/ztiot/ztiot-cc/models"
+	"github.com/ztiot/ztiot-cc/models" // DeviceAsset and TrustEvent record types
 )
 
-// TrustContract records trust values continuously. This is contribution 1
-// (Gap 1): trust is re-decided on every evaluation cycle from observed
-// behaviour, instead of being assigned once at registration.
+// TrustContract records trust values continuously.
 type TrustContract struct {
 	contractapi.Contract
 }
 
 // RecordTrustValue writes one behaviour-derived trust value for a device.
-// Allowed callers: the trust engine identity (role=trustengine) or an admin.
-//
-// It updates the current device record AND appends an immutable TrustEvent
-// carrying the cause and a SHA-256 fingerprint of the evidence.
 func (c *TrustContract) RecordTrustValue(
 	ctx contractapi.TransactionContextInterface,
 	deviceID string, newValue float64, threshold float64,

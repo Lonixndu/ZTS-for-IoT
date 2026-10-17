@@ -1,13 +1,8 @@
-// Package models holds the records stored on the ledger.
 package models
 
-// DeviceAsset is the current state of one device.
-// Stored under key DEVICE_<DeviceID> and overwritten in place.
-// Every earlier version stays in the block files and is returned by
-// DeviceContract:GetDeviceHistory.
 type DeviceAsset struct {
 	DocType        string    `json:"docType"`        // always "device"
-	DeviceID       string    `json:"deviceId"`       // e.g. dev-004
+	DeviceID       string    `json:"deviceId"`       // dev-001
 	DeviceType     string    `json:"deviceType"`     // camera, sensor, actuator, gateway, meter, lock
 	Criticality    int       `json:"criticality"`    // 1 (low) to 5 (high)
 	IdentityHash   string    `json:"identityHash"`   // SHA-256 of the device certificate, hex

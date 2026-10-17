@@ -1,39 +1,13 @@
-"""
-generate_trust.py
+import argparse                                  # read command-line options (--scenario, --steps ...)
+import json                                      # write the ground truth file
+import random                                    # random noise, so values look realistic
+import sys                                       # print to stderr, exit with an error code
+import threading                                 # one HTTP session per worker thread
+import time                                      # measure time, wait between steps
+from concurrent.futures import ThreadPoolExecutor  # send several requests at the same time
+from datetime import datetime, timezone          # time stamp in the ground truth file
 
-Sends realistic trust values through the service interface so the
-blockchain component can be built, tested and benchmarked before
-Member 1's real trust engine is available.
-
-Usage:
-    python simulator/generate_trust.py \
-        --scenario low_and_slow --devices 24 --attackers 9 \
-        --steps 40 --key "$BRIDGE_API_KEY"
-
-Scenarios:
-    normal          all devices behave normally, no attackers
-    single_loud      one attacker collapses fast, tests per-device detection
-    low_and_slow    attackers drift down slowly together, tests correlation
-    burst           attackers drop hard and fast, as a group
-    recovering      attackers climb back to a healthy value
-
-The --url, --key and --devices/--attackers options let you replay any
-of these against a running service interface. Ground truth (which
-devices are attackers, and in which step they start) is printed to
-stderr and also written to a JSON file, so detection experiments can
-be scored against it later.
-"""
-
-import argparse
-import json
-import random
-import sys
-import threading
-import time
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
-
-import requests
+import requests                                  # HTTP client used to call the bridge
 
 
 # ---------------------------------------------------------------------------
@@ -45,34 +19,48 @@ import requests
 
 def clamp(v: float) -> float:
     """Keep every value inside the 0 to 100 range the ledger accepts."""
+    # e.g. 104 -> 100 and -6 -> 0. The bridge and the chaincode would
+    # reject anything outside 0..100.
     return max(0.0, min(100.0, v))
 
 
 def normal(t: int) -> float:
     """Healthy device: stays high, small random noise."""
+    # random.gauss(3, 2) = a random number around 3 (usually 1 to 5),
+    # so the value is usually about 95 to 99
     return clamp(100 - random.gauss(3, 2))
 
 
 def single_loud(t: int) -> float:
     """One device collapses fast and obviously."""
+    # 100, 88, 76, 64 ... : below the threshold 70 from step 3, 0 from step 9.
+    # Use with --attackers 1 for a true "single" attacker.
     return clamp(100 - t * 12)
 
 
 def low_and_slow(t: int) -> float:
     """Slow, quiet decline. No single step looks alarming on its own."""
+    # drops only 0.7 per step: after 40 steps it is still about 72.7,
+    # ABOVE the threshold 70. A per-device check never flags these devices.
+    # This is exactly Gap 2: only a fleet-wide view (many devices drifting
+    # down together) can reveal the coordinated attack.
     return clamp(100 - t * 0.7 - random.gauss(0, 0.4))
 
 
 def burst(t: int) -> float:
     """Fast, hard drop shared across several devices at once."""
+    # 8 points per step: below 70 from about step 4
     return clamp(100 - t * 8 - random.gauss(0, 2))
 
 
 def recovering(t: int) -> float:
     """Climbs back up after starting low, to test status recovery."""
+    # starts at 40 (SUSPECT), passes 70 at about step 6 (back to ACTIVE),
+    # reaches 100 at about step 12
     return clamp(40 + t * 5 + random.gauss(0, 1))
 
 
+# name -> function, used by --scenario and by run()
 SCENARIOS = {
     "normal": normal,
     "single_loud": single_loud,
@@ -84,6 +72,9 @@ SCENARIOS = {
 
 # ---------------------------------------------------------------------------
 # Ground truth
+# The "correct answer": which devices are really attackers. Later a
+# detection method (Gap 2) can be scored against it (how many found, how
+# many missed, how many false alarms).
 # ---------------------------------------------------------------------------
 
 def choose_attackers(device_ids, attacker_count, scenario):
@@ -97,17 +88,20 @@ def choose_attackers(device_ids, attacker_count, scenario):
     only to mark which devices follow the named scenario curve.
     """
     if attacker_count <= 0 or scenario == "normal":
-        return set()
+        return set()                       # no attackers
     n = len(device_ids)
-    step = max(1, n // attacker_count)
+    step = max(1, n // attacker_count)     # gap between attackers, e.g. 24 // 9 = 2
+    # pick every "step"-th device, starting from the second one.
+    # With 24 devices and 9 attackers: dev-002, dev-004, ..., dev-018
     chosen = {device_ids[(i * step + 1) % n] for i in range(attacker_count)}
     return chosen
 
 
 def write_ground_truth(path, scenario, devices, attackers, window_start_step):
+    # Save the run details as JSON (default file: ground_truth.json)
     record = {
         "scenario": scenario,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),  # when the run started (UTC)
         "total_devices": len(devices),
         "attacker_devices": sorted(attackers),
         "attacker_count": len(attackers),
@@ -133,28 +127,31 @@ def send_trust_value(session, url, key, device_id, trust_value,
     do not stop the run, because one dropped request should not abort
     a whole benchmarking session.
     """
+    # The same fields as TrustUpdate in bridge/main.py
     payload = {
         "device_id": device_id,
-        "trust_value": round(trust_value, 2),
+        "trust_value": round(trust_value, 2),   # 2 decimals, like the chaincode stores
         "threshold": threshold,
         "reason_code": reason_code,
         "attack_class": attack_class,
         "confidence": confidence,
-        "evidence": evidence_tag,
+        "evidence": evidence_tag,               # short text; the ledger stores only its SHA-256 hash
     }
     try:
         r = session.post(
             f"{url}/v1/trust",
-            headers={"x-api-key": key, "Content-Type": "application/json"},
+            headers={"x-api-key": key, "Content-Type": "application/json"},  # API key for the bridge
             json=payload,
-            timeout=timeout,
+            timeout=timeout,                    # give up after 20 s (a Fabric commit takes about 2 s)
         )
         if r.status_code != 200:
+            # e.g. 401 wrong key, 422 bad value, 400 device not registered
             print(f"  [warn] {device_id}: HTTP {r.status_code} {r.text[:200]}",
                   file=sys.stderr)
             return False
         return True
     except requests.exceptions.RequestException as exc:
+        # the bridge is not running, or no answer in time
         print(f"  [error] {device_id}: {exc}", file=sys.stderr)
         return False
 
@@ -173,6 +170,9 @@ def run(scenario, devices, attackers, steps, url, key, delay,
     24 devices x 2 s = 48 s per step. Each device still gets exactly one
     value per step, so parallel sending never creates write conflicts.
     """
+    # Each thread keeps its own requests.Session (sessions are not safe to
+    # share between threads). A session reuses the open connection, which
+    # is faster than opening a new one for every request.
     local = threading.local()
 
     def session():
@@ -180,20 +180,22 @@ def run(scenario, devices, attackers, steps, url, key, delay,
             local.s = requests.Session()
         return local.s
 
+    # attackers are reported as AI_ANOMALY, normal devices as MANUAL
     reason_code = "AI_ANOMALY" if attackers else "MANUAL"
 
     sent, failed = 0, 0
     start_time = time.time()
 
-    for t in range(steps):
+    for t in range(steps):                     # one loop = one evaluation cycle
+        # 1. work out every device's value for this step
         jobs = []
         for dev in devices:
             if dev in attackers:
-                value = SCENARIOS[scenario](t)
-                attack_class = scenario
+                value = SCENARIOS[scenario](t)  # attacker follows the scenario curve
+                attack_class = scenario         # label, e.g. "low_and_slow"
                 conf = confidence
             else:
-                value = SCENARIOS["normal"](t)
+                value = SCENARIOS["normal"](t)  # everyone else behaves normally
                 attack_class = ""
                 conf = 0.0
             jobs.append(dict(
@@ -203,15 +205,17 @@ def run(scenario, devices, attackers, steps, url, key, delay,
                 reason_code=reason_code if dev in attackers else "MANUAL",
                 attack_class=attack_class,
                 confidence=conf,
-                evidence_tag=f"{dev}-step{t}-{scenario}",
+                evidence_tag=f"{dev}-step{t}-{scenario}",  # e.g. "dev-004-step3-low_and_slow"
             ))
 
+        # 2. send all values of this step in parallel and wait for all answers
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             results = list(pool.map(
-                lambda j: send_trust_value(session(), url, key, **j), jobs))
+                lambda j: send_trust_value(session(), url, key, **j), jobs))  # **j = use the dict as named arguments
         sent += sum(1 for ok in results if ok)
         failed += sum(1 for ok in results if not ok)
 
+        # 3. show progress, then wait before the next step
         elapsed = time.time() - start_time
         print(f"[step {t + 1}/{steps}] sent so far: {sent}  failed: {failed}  "
               f"elapsed: {elapsed:.1f}s", file=sys.stderr)
@@ -225,12 +229,13 @@ def run(scenario, devices, attackers, steps, url, key, delay,
 
 
 def parse_args():
+    # Command-line options. Every option has a default except --key.
     ap = argparse.ArgumentParser(
         description="Generate simulated trust values for testing the "
                     "blockchain component before Member 1's trust "
                     "engine is available.")
     ap.add_argument("--scenario", default="low_and_slow",
-                    choices=sorted(SCENARIOS),
+                    choices=sorted(SCENARIOS),              # only the five names above are accepted
                     help="which behaviour pattern to replay")
     ap.add_argument("--devices", type=int, default=24,
                     help="total number of simulated devices")
@@ -259,9 +264,12 @@ def parse_args():
     return ap.parse_args()
 
 
+# Runs only when the file is started directly (python generate_trust.py),
+# not when it is imported by another file.
 if __name__ == "__main__":
     args = parse_args()
 
+    # same seed -> same random noise -> the same values every run
     if args.seed is not None:
         random.seed(args.seed)
 
@@ -269,9 +277,11 @@ if __name__ == "__main__":
         print("error: --attackers cannot exceed --devices", file=sys.stderr)
         sys.exit(1)
 
+    # device IDs match register_devices.py: dev-001, dev-002, ...
     device_ids = [f"dev-{i:03d}" for i in range(1, args.devices + 1)]
     attacker_set = choose_attackers(device_ids, args.attackers, args.scenario)
 
+    # print the run settings (stderr, so they do not mix with normal output)
     print(f"scenario        = {args.scenario}", file=sys.stderr)
     print(f"total devices   = {len(device_ids)}", file=sys.stderr)
     print(f"attacker devices= {sorted(attacker_set) if attacker_set else '(none)'}",
@@ -279,6 +289,7 @@ if __name__ == "__main__":
     print(f"target          = {args.url}", file=sys.stderr)
     print("-" * 60, file=sys.stderr)
 
+    # all attackers start at step 0 in these scenarios
     write_ground_truth(args.ground_truth_out, args.scenario,
                        device_ids, attacker_set, window_start_step=0)
 
