@@ -1,0 +1,107 @@
+{
+  "prototypeVersion": "0.3.0",
+  "dataSource": "synthetic risk values only",
+  "seed": 42,
+  "devicesPerScenario": 2,
+  "attackRounds": 10,
+  "warmupRounds": 5,
+  "feedback": "static",
+  "ablation": null,
+  "config": {
+    "weights": {
+      "criticality": 0.08,
+      "violation_history": 0.22,
+      "score_velocity": 0.1,
+      "personal_baseline": 0.08,
+      "network_context": 0.06
+    },
+    "base_threshold": 0.5,
+    "minimum_threshold": 0.1,
+    "maximum_threshold": 0.95,
+    "probe_band": 0.08,
+    "history_decay": 0.9,
+    "history_increment": 0.35,
+    "velocity_scale": 0.15,
+    "baseline_scale": 0.4,
+    "default_baseline_risk": 0.15,
+    "baseline_update_max_risk": 0.25,
+    "baseline_samples": 5,
+    "history_limit": 256,
+    "max_devices": 200
+  },
+  "metrics": {
+    "adaptive": {
+      "attackDevices": 6,
+      "preAttackQuarantines": 0,
+      "eligibleAttackDevices": 6,
+      "caughtAttackDevices": 6,
+      "uncaughtAttackDevices": 0,
+      "evasionCatchRate": 1.0,
+      "caughtWithin10Rounds": 6,
+      "evasionCatchRateWithin10Rounds": 1.0,
+      "benignDevices": 2,
+      "falsePositiveDevices": 1,
+      "falsePositiveRate": 0.5,
+      "medianRoundsToQuarantineAmongCaught": 1.0,
+      "medianIndicatorToQuarantineRoundsAmongCaught": 0.0,
+      "p95ComputeLatencyMs": 0.1086429992938065,
+      "byStrategy": {
+        "fixed_margin": {
+          "eligible": 2,
+          "caught": 2,
+          "caughtWithin10": 2
+        },
+        "slow_drift": {
+          "eligible": 2,
+          "caught": 2,
+          "caughtWithin10": 2
+        },
+        "randomised": {
+          "eligible": 2,
+          "caught": 2,
+          "caughtWithin10": 2
+        }
+      }
+    },
+    "static": {
+      "attackDevices": 6,
+      "preAttackQuarantines": 0,
+      "eligibleAttackDevices": 6,
+      "caughtAttackDevices": 0,
+      "uncaughtAttackDevices": 6,
+      "evasionCatchRate": 0.0,
+      "caughtWithin10Rounds": 0,
+      "evasionCatchRateWithin10Rounds": 0.0,
+      "benignDevices": 2,
+      "falsePositiveDevices": 0,
+      "falsePositiveRate": 0.0,
+      "medianRoundsToQuarantineAmongCaught": null,
+      "medianIndicatorToQuarantineRoundsAmongCaught": null,
+      "p95ComputeLatencyMs": 0.12457299999368843,
+      "byStrategy": {
+        "fixed_margin": {
+          "eligible": 2,
+          "caught": 0,
+          "caughtWithin10": 0
+        },
+        "slow_drift": {
+          "eligible": 2,
+          "caught": 0,
+          "caughtWithin10": 0
+        },
+        "randomised": {
+          "eligible": 2,
+          "caught": 0,
+          "caughtWithin10": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "Weights are provisional; these are demonstration metrics, not validated research results.",
+    "Both engines receive the same observations and have separate device state.",
+    "Static feedback constrains probes to evade the fixed boundary by construction.",
+    "Adaptive feedback uses the previous adaptive threshold, not a next-step optimisation oracle.",
+    "Compute latency excludes locking, state copying, CSV output, HTTP, and network enforcement."
+  ]
+}

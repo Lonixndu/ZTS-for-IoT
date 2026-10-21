@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Trust API (local, one worker)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_server.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

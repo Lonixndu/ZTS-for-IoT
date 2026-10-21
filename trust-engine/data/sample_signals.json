@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic API demonstration observations, not benchmark dataset samples.",
+  "criticality": 0.5,
+  "observations": [
+    {"BehaviorRisk": 0.12, "networkContext": 0.05, "evidenceRef": "demo:observation:1"},
+    {"BehaviorRisk": 0.14, "networkContext": 0.05, "evidenceRef": "demo:observation:2"},
+    {"BehaviorRisk": 0.40, "networkContext": 0.05, "evidenceRef": "demo:observation:3"},
+    {"BehaviorRisk": 0.05, "networkContext": 0.05, "evidenceRef": "demo:observation:4"}
+  ]
+}

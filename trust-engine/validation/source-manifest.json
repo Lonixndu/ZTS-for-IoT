@@ -1,0 +1,55 @@
+{
+  "project": "J26-CS-315",
+  "component_version": "0.3.0",
+  "sources": [
+    {
+      "filename": "IoT_AI_Member2_to_Member1_TrustScore_Integration_Guide(1).pdf",
+      "size_bytes": 473673,
+      "sha256": "56b9720f6da80e9c6e76d1b70be70a714b005add31714e34649f662e8dfce797"
+    },
+    {
+      "filename": "blockchain(3).zip",
+      "size_bytes": 50078,
+      "sha256": "75d18b4951283e8a47d17951c4e5c90beece3337fbf6598f78278422a6bae4ed"
+    },
+    {
+      "filename": "zero-trust-iot-starter(2).zip",
+      "size_bytes": 56321,
+      "sha256": "85ef752431f0ba6ab41e394d43f9b3cada7866550fa470b400add5aa43f379a1"
+    }
+  ],
+  "preserved_algorithm_files": [
+    {
+      "filename": "engine.py",
+      "byte_identical": true,
+      "sha256": "38d301034c63ff19862b0314f129389b87f1671d0ad53fceb8715c974844d6bb"
+    },
+    {
+      "filename": "features.py",
+      "byte_identical": true,
+      "sha256": "d9b70d6fc47985347e8b3a8b81a6d8ef8939bdfbfb372f4a82fc9710380c89c3"
+    },
+    {
+      "filename": "adaptive_threshold.py",
+      "byte_identical": true,
+      "sha256": "6d73638dc0d4cdf14bdeb4014ef30c6bd76c724b748fdf1feec67262de7e6311"
+    },
+    {
+      "filename": "static_baseline.py",
+      "byte_identical": true,
+      "sha256": "122fa871c417e54acdf0b1bcf3fa71e0e75d272e9c63daf8a06a8abb16bed2a9"
+    },
+    {
+      "filename": "device_state.py",
+      "byte_identical": true,
+      "sha256": "9ddfbc7e37637da0946e230f2fc23c995ddea4abdc795600213339180834cc0b"
+    }
+  ],
+  "config_change": "Only VERSION changed from 0.2.0 to 0.3.0; every scoring parameter is unchanged.",
+  "github_snapshot": {
+    "repository": "https://github.com/Lonixndu/ZTS-for-IoT.git",
+    "branch": "main",
+    "commit": "6304b7b6dec097e352e235988c86a859e1aff827",
+    "writes_performed": false
+  }
+}
