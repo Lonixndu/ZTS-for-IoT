@@ -1,0 +1,7 @@
+{
+    "validation_records": 804015,
+    "ae_normalization": "clip(error / scale, 0, 1)",
+    "ae_scale": 0.14461635798215866,
+    "fpr_constraint": 0.05,
+    "note": "Validation-only model selection. Scores are not calibrated probabilities. Test partition remains untouched."
+}

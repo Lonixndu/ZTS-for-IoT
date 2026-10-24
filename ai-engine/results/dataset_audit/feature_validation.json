@@ -1,0 +1,334 @@
+{
+    "total_rows": 5357406,
+    "feature_count": 46,
+    "non_numeric_values": {
+        "flow_duration": 0,
+        "Header_Length": 0,
+        "Protocol Type": 0,
+        "Duration": 0,
+        "Rate": 0,
+        "Srate": 0,
+        "Drate": 0,
+        "fin_flag_number": 0,
+        "syn_flag_number": 0,
+        "rst_flag_number": 0,
+        "psh_flag_number": 0,
+        "ack_flag_number": 0,
+        "ece_flag_number": 0,
+        "cwr_flag_number": 0,
+        "ack_count": 0,
+        "syn_count": 0,
+        "fin_count": 0,
+        "urg_count": 0,
+        "rst_count": 0,
+        "HTTP": 0,
+        "HTTPS": 0,
+        "DNS": 0,
+        "Telnet": 0,
+        "SMTP": 0,
+        "SSH": 0,
+        "IRC": 0,
+        "TCP": 0,
+        "UDP": 0,
+        "DHCP": 0,
+        "ARP": 0,
+        "ICMP": 0,
+        "IPv": 0,
+        "LLC": 0,
+        "Tot sum": 0,
+        "Min": 0,
+        "Max": 0,
+        "AVG": 0,
+        "Std": 0,
+        "Tot size": 0,
+        "IAT": 0,
+        "Number": 0,
+        "Magnitue": 0,
+        "Radius": 0,
+        "Covariance": 0,
+        "Variance": 0,
+        "Weight": 0
+    },
+    "missing_values": {
+        "flow_duration": 0,
+        "Header_Length": 0,
+        "Protocol Type": 0,
+        "Duration": 0,
+        "Rate": 0,
+        "Srate": 0,
+        "Drate": 0,
+        "fin_flag_number": 0,
+        "syn_flag_number": 0,
+        "rst_flag_number": 0,
+        "psh_flag_number": 0,
+        "ack_flag_number": 0,
+        "ece_flag_number": 0,
+        "cwr_flag_number": 0,
+        "ack_count": 0,
+        "syn_count": 0,
+        "fin_count": 0,
+        "urg_count": 0,
+        "rst_count": 0,
+        "HTTP": 0,
+        "HTTPS": 0,
+        "DNS": 0,
+        "Telnet": 0,
+        "SMTP": 0,
+        "SSH": 0,
+        "IRC": 0,
+        "TCP": 0,
+        "UDP": 0,
+        "DHCP": 0,
+        "ARP": 0,
+        "ICMP": 0,
+        "IPv": 0,
+        "LLC": 0,
+        "Tot sum": 0,
+        "Min": 0,
+        "Max": 0,
+        "AVG": 0,
+        "Std": 0,
+        "Tot size": 0,
+        "IAT": 0,
+        "Number": 0,
+        "Magnitue": 0,
+        "Radius": 0,
+        "Covariance": 0,
+        "Variance": 0,
+        "Weight": 0
+    },
+    "infinite_values": {
+        "flow_duration": 0,
+        "Header_Length": 0,
+        "Protocol Type": 0,
+        "Duration": 0,
+        "Rate": 0,
+        "Srate": 0,
+        "Drate": 0,
+        "fin_flag_number": 0,
+        "syn_flag_number": 0,
+        "rst_flag_number": 0,
+        "psh_flag_number": 0,
+        "ack_flag_number": 0,
+        "ece_flag_number": 0,
+        "cwr_flag_number": 0,
+        "ack_count": 0,
+        "syn_count": 0,
+        "fin_count": 0,
+        "urg_count": 0,
+        "rst_count": 0,
+        "HTTP": 0,
+        "HTTPS": 0,
+        "DNS": 0,
+        "Telnet": 0,
+        "SMTP": 0,
+        "SSH": 0,
+        "IRC": 0,
+        "TCP": 0,
+        "UDP": 0,
+        "DHCP": 0,
+        "ARP": 0,
+        "ICMP": 0,
+        "IPv": 0,
+        "LLC": 0,
+        "Tot sum": 0,
+        "Min": 0,
+        "Max": 0,
+        "AVG": 0,
+        "Std": 0,
+        "Tot size": 0,
+        "IAT": 0,
+        "Number": 0,
+        "Magnitue": 0,
+        "Radius": 0,
+        "Covariance": 0,
+        "Variance": 0,
+        "Weight": 0
+    },
+    "feature_ranges": {
+        "flow_duration": {
+            "min": 0.0,
+            "max": 99435.76178212166
+        },
+        "Header_Length": {
+            "min": 0.0,
+            "max": 9890104.9
+        },
+        "Protocol Type": {
+            "min": 0.0,
+            "max": 47.0
+        },
+        "Duration": {
+            "min": 0.0,
+            "max": 255.0
+        },
+        "Rate": {
+            "min": 0.0,
+            "max": 8388608.0
+        },
+        "Srate": {
+            "min": 0.0,
+            "max": 8388608.0
+        },
+        "Drate": {
+            "min": 0.0,
+            "max": 2.6792104758862987
+        },
+        "fin_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "syn_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "rst_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "psh_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "ack_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "ece_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "cwr_flag_number": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "ack_count": {
+            "min": 0.0,
+            "max": 5.7
+        },
+        "syn_count": {
+            "min": 0.0,
+            "max": 12.61
+        },
+        "fin_count": {
+            "min": 0.0,
+            "max": 82.43
+        },
+        "urg_count": {
+            "min": 0.0,
+            "max": 4167.7
+        },
+        "rst_count": {
+            "min": 0.0,
+            "max": 9586.5
+        },
+        "HTTP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "HTTPS": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "DNS": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "Telnet": {
+            "min": 0.0,
+            "max": 0.0
+        },
+        "SMTP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "SSH": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "IRC": {
+            "min": 0.0,
+            "max": 0.0
+        },
+        "TCP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "UDP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "DHCP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "ARP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "ICMP": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "IPv": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "LLC": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "Tot sum": {
+            "min": 42.0,
+            "max": 108933.8
+        },
+        "Min": {
+            "min": 42.0,
+            "max": 4702.7
+        },
+        "Max": {
+            "min": 42.0,
+            "max": 30474.0
+        },
+        "AVG": {
+            "min": 42.0,
+            "max": 11600.474325396824
+        },
+        "Std": {
+            "min": 0.0,
+            "max": 9302.373322400315
+        },
+        "Tot size": {
+            "min": 42.0,
+            "max": 13098.0
+        },
+        "IAT": {
+            "min": 0.0,
+            "max": 167639429.84685913
+        },
+        "Number": {
+            "min": 1.0,
+            "max": 15.0
+        },
+        "Magnitue": {
+            "min": 9.165151389911676,
+            "max": 145.3904472200496
+        },
+        "Radius": {
+            "min": 0.0,
+            "max": 13155.542514796194
+        },
+        "Covariance": {
+            "min": 0.0,
+            "max": 96708369.53422824
+        },
+        "Variance": {
+            "min": 0.0,
+            "max": 1.0
+        },
+        "Weight": {
+            "min": 1.0,
+            "max": 244.6
+        }
+    }
+}

@@ -1,0 +1,13 @@
+predicted_class,false_positive_count
+Recon-PortScan,165
+Recon-HostDiscovery,129
+DNS_Spoofing,125
+Recon-OSScan,97
+DictionaryBruteForce,92
+BrowserHijacking,46
+MITM-ArpSpoofing,35
+SqlInjection,30
+CommandInjection,26
+XSS,8
+Backdoor_Malware,3
+Recon-PingSweep,2

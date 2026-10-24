@@ -1,0 +1,11 @@
+{
+    "total": 51,
+    "correct_class": 14,
+    "incorrect_class": 37,
+    "binary_detected": 47,
+    "binary_missed": 4,
+    "multiclass_recall": 0.27450980392156865,
+    "binary_recall": 0.9215686274509803,
+    "wrong_class_but_detected": 33,
+    "wrong_class_and_missed": 4
+}

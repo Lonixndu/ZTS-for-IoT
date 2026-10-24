@@ -1,0 +1,15 @@
+{
+    "evaluation": "filtered_original_ciciot2023_test",
+    "records": 1119004,
+    "multiclass_accuracy": 0.99462289679036,
+    "binary_accuracy": 0.9973646206805338,
+    "attack_recall": 0.9983251574168985,
+    "benign_fpr": 0.04244424214838416,
+    "tp": 1090810,
+    "tn": 25245,
+    "fp": 1119,
+    "fn": 1830,
+    "inference_seconds": 34.92159279977204,
+    "throughput": 32043.32650048266,
+    "note": "Exact matching 44-feature-plus-label rows removed. Dataset remains part of CICIoT2023 collection."
+}

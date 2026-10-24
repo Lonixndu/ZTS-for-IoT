@@ -1,0 +1,21 @@
+{
+    "test_records": 1119004,
+    "candidate_xgb_weight": 0.95,
+    "candidate_threshold": 0.7294445753097534,
+    "v3": {
+        "fpr": 0.04244424214838416,
+        "attack_recall": 0.9983251574168985,
+        "false_positives": 1119,
+        "true_positives": 1090810,
+        "pingsweep_detected": 47,
+        "pingsweep_total": 51
+    },
+    "v4": {
+        "fpr": 0.02002730996813837,
+        "attack_recall": 0.9975316664226095,
+        "false_positives": 528,
+        "true_positives": 1089943,
+        "pingsweep_detected": 45,
+        "pingsweep_total": 51
+    }
+}

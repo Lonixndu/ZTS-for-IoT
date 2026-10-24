@@ -1,0 +1,13 @@
+{
+    "model": "Random Forest v2",
+    "dataset": "CICIoT2023 cleaned",
+    "training_records": 325915,
+    "validation_records": 804015,
+    "feature_count": 44,
+    "class_count": 34,
+    "max_training_samples_per_class": 15000,
+    "training_seconds": 19.579106799996225,
+    "validation_accuracy": 0.9917451788834786,
+    "validation_macro_f1": 0.8149141449868589,
+    "validation_weighted_f1": 0.9918848367860018
+}

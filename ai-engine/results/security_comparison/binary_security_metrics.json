@@ -1,0 +1,20 @@
+{
+    "Random Forest v2": {
+        "true_positive": 784113,
+        "true_negative": 17016,
+        "false_positive": 1935,
+        "false_negative": 951,
+        "attack_detection_rate": 0.9987886337929137,
+        "benign_false_positive_rate": 0.10210542979262308,
+        "binary_precision": 0.99753831827064
+    },
+    "XGBoost v1": {
+        "true_positive": 784458,
+        "true_negative": 16587,
+        "false_positive": 2364,
+        "false_negative": 606,
+        "attack_detection_rate": 0.9992280884106264,
+        "benign_false_positive_rate": 0.12474275763811936,
+        "binary_precision": 0.9969955085139968
+    }
+}

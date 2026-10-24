@@ -1,0 +1,43 @@
+{
+    "test_records": 805816,
+    "benign_records": 18940,
+    "attack_records": 786876,
+    "roc_auc": {
+        "xgboost": 0.9997193286313397,
+        "fusion": 0.9980522988872153
+    },
+    "multiclass_results": {
+        "Random Forest v2": {
+            "accuracy": 0.9917574235309301,
+            "macro_f1": 0.8119924048022704,
+            "weighted_f1": 0.9918818384157801
+        },
+        "XGBoost v1": {
+            "accuracy": 0.9930914749769179,
+            "macro_f1": 0.8254699369332845,
+            "weighted_f1": 0.993516869121151
+        }
+    },
+    "configuration": {
+        "version": "fusion_v2_frozen",
+        "selection_dataset": "validation",
+        "target_benign_fpr": 0.04,
+        "ae_normalization": {
+            "method": "clip(error / scale, 0, 1)",
+            "scale": 0.14461635798215866
+        },
+        "candidates": {
+            "xgboost_only": {
+                "xgb_weight": 1.0,
+                "ae_weight": 0.0,
+                "threshold": 0.895044207572937
+            },
+            "xgboost_ae_fusion": {
+                "xgb_weight": 0.8,
+                "ae_weight": 0.2,
+                "threshold": 0.753843287750872
+            }
+        }
+    },
+    "evaluation_seconds": 53.39695080000092
+}

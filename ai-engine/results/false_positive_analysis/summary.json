@@ -1,0 +1,8 @@
+{
+    "model": "XGBoost v1",
+    "threshold": 0.895044207572937,
+    "benign_validation_records": 18951,
+    "false_positive_records": 758,
+    "benign_fpr": 0.03999788929344098,
+    "true_negative_records": 18193
+}
