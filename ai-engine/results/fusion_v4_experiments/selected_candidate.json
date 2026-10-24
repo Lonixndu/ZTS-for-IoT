@@ -1,0 +1,11 @@
+{
+    "xgb_weight": 0.95,
+    "ae_weight": 0.050000000000000044,
+    "target_fpr": 0.02,
+    "threshold": 0.7294445753097534,
+    "actual_fpr": 0.01999894464672049,
+    "attack_recall": 0.9974447943097633,
+    "pingsweep_binary_recall": 0.8064516129032258,
+    "pingsweep_detected": 25.0,
+    "pingsweep_total": 31.0
+}

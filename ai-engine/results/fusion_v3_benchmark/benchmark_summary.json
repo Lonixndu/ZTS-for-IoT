@@ -1,0 +1,54 @@
+{
+    "model": "Frozen Fusion v3",
+    "hardware": "Local CPU",
+    "load_seconds": 1.311493800021708,
+    "single_record_latency": {
+        "runs": 1000,
+        "mean_ms": 6.680169599479996,
+        "median_ms": 6.659600010607392,
+        "p95_ms": 8.029220017488115,
+        "p99_ms": 8.386182001559064,
+        "min_ms": 4.697700031101704,
+        "max_ms": 8.901200024411082
+    },
+    "resources": {
+        "cpu_percent_mean": 537.204255319149,
+        "cpu_percent_max": 698.2,
+        "rss_memory_mb_mean": 485.48246343085106,
+        "rss_memory_mb_max": 486.75,
+        "resource_test_iterations": 12,
+        "resource_test_seconds": 5.262526099977549
+    },
+    "batch_results": [
+        {
+            "batch_size": 1,
+            "median_seconds": 0.0075023999670520425,
+            "records_per_second": 133.2906809009991,
+            "milliseconds_per_record": 7.5023999670520425
+        },
+        {
+            "batch_size": 10,
+            "median_seconds": 0.008794299967121333,
+            "records_per_second": 1137.1001714049257,
+            "milliseconds_per_record": 0.8794299967121333
+        },
+        {
+            "batch_size": 100,
+            "median_seconds": 0.01228829997126013,
+            "records_per_second": 8137.8221750673365,
+            "milliseconds_per_record": 0.1228829997126013
+        },
+        {
+            "batch_size": 1000,
+            "median_seconds": 0.0502748999861069,
+            "records_per_second": 19890.64125988003,
+            "milliseconds_per_record": 0.0502748999861069
+        },
+        {
+            "batch_size": 10000,
+            "median_seconds": 0.42978250002488494,
+            "records_per_second": 23267.583020297447,
+            "milliseconds_per_record": 0.04297825000248849
+        }
+    ]
+}

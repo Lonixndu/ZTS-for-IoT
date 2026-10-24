@@ -1,0 +1,7 @@
+{
+    "total_records": 5491971,
+    "exact_duplicate_hash_matches": 134565,
+    "feature_duplicate_hash_matches": 134565,
+    "conflicting_label_hash_matches": 0,
+    "note": "Hash-based screening. Hash collisions are possible. Conflicting-label count compares each duplicate with the first observed label for its feature hash."
+}

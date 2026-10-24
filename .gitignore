@@ -1,0 +1,8 @@
+**/datasets/raw/
+**/datasets/processed/
+**/models/*.joblib
+**/models/*.pt
+**/results/original_test/nonoverlap_test.csv
+**/results/dataset_audit/*.duckdb
+__pycache__/
+*.pyc

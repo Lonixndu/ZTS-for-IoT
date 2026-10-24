@@ -1,0 +1,17 @@
+{
+    "model": "Fusion v3 frozen",
+    "dataset": "D:\\zero-trust-iot\\ai-engine\\datasets\\processed\\splits\\test.csv",
+    "evaluation_type": "retrospective_existing_test_partition",
+    "records": 805816,
+    "binary_accuracy": 0.9973914640563106,
+    "multiclass_accuracy": 0.9945024670644416,
+    "attack_recall": 0.9982589378758534,
+    "benign_fpr": 0.038648363252375924,
+    "true_positive": 785506,
+    "true_negative": 18208,
+    "false_positive": 732,
+    "false_negative": 1370,
+    "inference_seconds": 25.24239590007346,
+    "throughput_records_per_second": 31923.118676609254,
+    "note": "This test partition was previously evaluated. Results are not a new independent generalization test."
+}

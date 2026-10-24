@@ -1,0 +1,5 @@
+actual_label,predicted_class,confidence,xgb_attack_score,ae_reconstruction_error,ae_score,behavior_risk,detected_attack,correct_class,correct_binary,scenario,inference_ms
+BenignTraffic,BenignTraffic,0.9998757839202881,0.00012421607971191406,0.009229335933923721,0.06381944566965103,0.006493739318102598,False,True,True,Correct benign prediction,5.954899999778718
+DDoS-SYN_Flood,DDoS-SYN_Flood,0.9999885559082031,0.9999998211860657,0.09513068944215775,0.6578141450881958,0.9657812118530273,True,True,True,Correct common attack,7.481299981009215
+SqlInjection,SqlInjection,0.9686323404312134,0.9850156307220459,0.16454869508743286,1.0,0.9865140914916992,True,True,True,Correct rare attack,7.399599999189377
+Recon-PingSweep,BenignTraffic,0.44879069924354553,0.5512093305587769,0.009561359882354736,0.06611533463001251,0.5026999115943909,False,False,False,Misclassified PingSweep,7.549699977971613

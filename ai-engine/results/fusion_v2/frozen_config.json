@@ -1,0 +1,21 @@
+{
+    "version": "fusion_v2_frozen",
+    "selection_dataset": "validation",
+    "target_benign_fpr": 0.04,
+    "ae_normalization": {
+        "method": "clip(error / scale, 0, 1)",
+        "scale": 0.14461635798215866
+    },
+    "candidates": {
+        "xgboost_only": {
+            "xgb_weight": 1.0,
+            "ae_weight": 0.0,
+            "threshold": 0.895044207572937
+        },
+        "xgboost_ae_fusion": {
+            "xgb_weight": 0.8,
+            "ae_weight": 0.2,
+            "threshold": 0.753843287750872
+        }
+    }
+}
