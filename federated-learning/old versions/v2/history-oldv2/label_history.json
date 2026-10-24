@@ -1,0 +1,53 @@
+{
+  "camera|HTTP": {
+    "ddos": 77740,
+    "dos": 13300,
+    "recon": 1217,
+    "normal": 531,
+    "intrusion": 1370,
+    "exploit": 61,
+    "mirai": 12
+  },
+  "generic_iot|TCP": {
+    "ddos": 846668,
+    "dos": 192747,
+    "normal": 1444,
+    "recon": 8013,
+    "intrusion": 1326,
+    "exploit": 133,
+    "mirai": 1
+  },
+  "smart_lock|UDP": {
+    "ddos": 230016,
+    "dos": 112182,
+    "mirai": 28647,
+    "intrusion": 3461,
+    "recon": 281,
+    "normal": 42,
+    "exploit": 8
+  },
+  "camera|HTTPS": {
+    "intrusion": 9122,
+    "ddos": 50184,
+    "dos": 13970,
+    "recon": 2070,
+    "normal": 18897,
+    "exploit": 125,
+    "mirai": 4
+  },
+  "sensor|ICMP": {
+    "ddos": 334819,
+    "dos": 13
+  },
+  "sensor|ARP": {
+    "intrusion": 9,
+    "recon": 24,
+    "normal": 3
+  },
+  "router|SSH": {
+    "exploit": 24
+  },
+  "router|DNS": {
+    "dos": 4
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "camera": {
+    "expected_normal": [
+      "HTTP",
+      "HTTPS",
+      "TCP"
+    ],
+    "always_attack": [
+      "Telnet",
+      "IRC"
+    ],
+    "suspicious_if_normal": [
+      "SSH",
+      "SMTP",
+      "IGMP"
+    ]
+  },
+  "router": {
+    "expected_normal": [
+      "SSH",
+      "DNS",
+      "HTTP",
+      "HTTPS",
+      "DHCP",
+      "TCP"
+    ],
+    "always_attack": [
+      "IRC"
+    ],
+    "suspicious_if_normal": [
+      "Telnet"
+    ]
+  },
+  "sensor": {
+    "expected_normal": [
+      "ICMP",
+      "ARP",
+      "UDP"
+    ],
+    "always_attack": [
+      "IRC",
+      "Telnet",
+      "SSH"
+    ],
+    "suspicious_if_normal": [
+      "HTTP",
+      "HTTPS"
+    ]
+  },
+  "smart_lock": {
+    "expected_normal": [
+      "UDP",
+      "TCP"
+    ],
+    "always_attack": [
+      "IRC",
+      "Telnet"
+    ],
+    "suspicious_if_normal": [
+      "SSH",
+      "SMTP"
+    ]
+  },
+  "generic_iot": {
+    "expected_normal": [
+      "TCP",
+      "UDP"
+    ],
+    "always_attack": [
+      "IRC",
+      "Telnet"
+    ],
+    "suspicious_if_normal": [
+      "SSH",
+      "IGMP"
+    ]
+  }
+}
