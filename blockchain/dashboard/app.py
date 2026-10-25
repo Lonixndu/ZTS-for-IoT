@@ -1,22 +1,6 @@
-"""
-ZTIoT Trust Ledger - Streamlit demo console for the blockchain component (Member 3).
-
-J26-CS-315 | Fernando M N (IT23248144)
-
-Everything goes through the same path the other members use:
-    dashboard -> bridge (127.0.0.1:8000, API key) -> connector -> Fabric smart contract
-The "Org1 vs Org2" page also reads the CouchDB world state directly (read only),
-to show that both organisations hold the same copy. The "Tamper test" page is the
-only place that writes to CouchDB directly: it plays an attacker on purpose.
-
-Run (from the blockchain folder, venv active):
-    pip install -r dashboard/requirements.txt
-    cd dashboard && streamlit run app.py
-Then open http://127.0.0.1:8501
-"""
-
 import hashlib
 import ipaddress
+import math
 import os
 import re
 import subprocess
@@ -34,19 +18,21 @@ FEEDER = ROOT / "Trust Score" / "feed_trust.py"            # Member 1 engine -> 
 DEVICE_TYPES = ["camera", "sensor", "actuator", "gateway", "meter", "lock"]
 REASON_CODES = ["AI_ANOMALY", "POLICY_VIOLATION", "RECOVERY", "MANUAL"]
 SCENARIOS = ["burst", "slow_drift", "fixed_margin", "randomised"]
+NICE = {"burst": "Burst", "slow_drift": "Slow Drift", "fixed_margin": "Fixed Margin",
+        "randomised": "Randomised", "adaptive": "Adaptive", "static": "Static"}
 NAVY, ORANGE, GREEN, RED = "#000080", "#FF7000", "#1B7F3B", "#C62828"
 STATUS_COLOURS = alt.Scale(domain=["ACTIVE", "SUSPECT"], range=[GREEN, RED])
 
 st.set_page_config(page_title="ZTIoT Trust Ledger", page_icon="🛡️", layout="wide")
+# Hide the Streamlit toolbar (Deploy button and the three-dot menu).
+st.markdown("<style>[data-testid='stToolbar'], [data-testid='stAppDeployButton'], [data-testid='stMainMenu'] {display: none !important;}</style>", unsafe_allow_html=True)
 
 
-# --------------------------------------------------------------------------
+
 # Settings (sidebar)
-# --------------------------------------------------------------------------
 
 def sidebar():
-    st.sidebar.title("ZTIoT Trust Ledger")
-    st.sidebar.caption("Member 3: Blockchain and Smart Contract Policy Enforcement")
+    st.sidebar.title("ZTIoT Trust Ledger", anchor=False)
     s = st.session_state
     s.setdefault("bridge", os.getenv("BLOCKCHAIN_URL", "http://127.0.0.1:8000"))
     s.setdefault("key", os.getenv("BRIDGE_API_KEY", "dev-key"))
@@ -62,32 +48,23 @@ def sidebar():
         s.couch_user = st.text_input("CouchDB user", s.couch_user)
         s.couch_pass = st.text_input("CouchDB password", s.couch_pass, type="password")
 
+    # Nothing is shown when all is well; a warning appears only if something is down.
     code, body = call("GET", "/health", key=False)
     if code == 200 and isinstance(body, dict):
         conn = body.get("connector")
-        if isinstance(conn, dict) and conn.get("status") == "ok":
-            st.sidebar.success(f"Bridge ok · ledger: {conn.get('ledger', '?')}")
-            if conn.get("msp"):
-                st.sidebar.caption(f"channel {conn.get('channel')} · chaincode {conn.get('chaincode')} · {conn.get('msp')}")
-        else:
+        if not (isinstance(conn, dict) and conn.get("status") == "ok"):
             st.sidebar.warning("Bridge ok · connector unreachable (start npm start)")
     else:
         st.sidebar.error("Bridge not reachable (start uvicorn on port 8000)")
 
     if st.sidebar.button("Refresh data", use_container_width=True):
         st.cache_data.clear()
-    page = st.sidebar.radio("Page", [
-        "Fleet overview", "Device detail", "Send trust value", "Member 1 trust engine",
-        "Register / move device", "Security tests", "Member 4 IP lookup", "Org1 vs Org2 (CouchDB)",
-        "Tamper test",
-    ])
-    st.sidebar.caption("Every write goes through the smart contract and is endorsed by both organisations.")
+    page = st.sidebar.radio("Page", list(PAGES))
     return page
 
 
-# --------------------------------------------------------------------------
+
 # HTTP helpers
-# --------------------------------------------------------------------------
 
 def call(method, path, body=None, key=True, raw=None, api_key=None):
     """Call the bridge. Returns (status code, parsed JSON or text). Never raises."""
@@ -119,19 +96,6 @@ def couch(base, path, body=None):
         return 0, {"error": str(exc)}
 
 
-def couch_put(base, path, doc):
-    """WRITE a document straight into CouchDB, bypassing the smart contract.
-    Used ONLY by the Tamper test page to play the attacker. Returns (code, json)."""
-    s = st.session_state
-    try:
-        with httpx.Client(base_url=base.rstrip("/"), timeout=10, trust_env=False,
-                          auth=(s.couch_user, s.couch_pass)) as c:
-            r = c.put(path, json=doc)
-        return r.status_code, r.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        return 0, {"error": str(exc)}
-
-
 def error_text(body):
     if isinstance(body, dict) and "detail" in body:
         d = body["detail"]
@@ -149,9 +113,8 @@ def show_result(code, body, ok_codes=(200,)):
     st.json(body if isinstance(body, (dict, list)) else {"response": body}, expanded=False)
 
 
-# --------------------------------------------------------------------------
+
 # Data loading (cached for a few seconds)
-# --------------------------------------------------------------------------
 
 @st.cache_data(ttl=5, show_spinner=False)
 def device_ids(couch1, user, password, fallback_n=24):
@@ -192,14 +155,14 @@ def fleet_frame():
     return df, source
 
 
-# --------------------------------------------------------------------------
+
 # Pages
-# --------------------------------------------------------------------------
+
 
 def page_fleet():
-    st.title("Fleet overview")
+    st.title("Overview", anchor=False)
     st.caption("Current state of every registered device, read through the smart contract (GetDevice).")
-    df, source = fleet_frame()
+    df, _ = fleet_frame()
     if df.empty:
         st.warning("No devices found. Start the bridge and connector, then run simulator/register_devices.py.")
         return
@@ -224,11 +187,10 @@ def page_fleet():
     cols = ["deviceId", "deviceType", "criticality", "networkAddress", "trustValue", "threshold",
             "status", "updateCount", "dropCount", "lastUpdated"]
     st.dataframe(df[[c for c in cols if c in df.columns]], use_container_width=True, hide_index=True)
-    st.caption(f"Device IDs listed from: {source}. Records read through the bridge and smart contract.")
 
 
 def page_device():
-    st.title("Device detail")
+    st.title("Device Detail", anchor=False)
     df, _ = fleet_frame()
     ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
     device_id = st.selectbox("Device", ids)
@@ -299,59 +261,23 @@ def page_device():
         st.json(dev)
 
 
-def page_send_trust():
-    st.title("Send a trust value")
-    st.caption("Stands in for Member 1's trust engine: POST /v1/trust. "
-               "The smart contract decides the status (trust < threshold -> SUSPECT).")
-    df, _ = fleet_frame()
-    ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
-    with st.form("trust"):
-        c1, c2 = st.columns(2)
-        device_id = c1.selectbox("Device", ids)
-        reason = c2.selectbox("Reason code", REASON_CODES)
-        trust = c1.slider("Trust value", 0.0, 100.0, 60.0, 0.5)
-        threshold = c2.number_input("Threshold", 0.0, 100.0, 70.0, 1.0)
-        attack = c1.text_input("Attack class (optional)", "port_scan")
-        confidence = c2.slider("AI confidence", 0.0, 1.0, 0.9, 0.05)
-        evidence = st.text_input("Evidence (only its SHA-256 is stored)", "1200 ports in 60s")
-        st.info(f"Expected decision: {'SUSPECT' if trust < threshold else 'ACTIVE'} "
-                f"({trust} {'<' if trust < threshold else '>='} {threshold})")
-        sent = st.form_submit_button("Send to the ledger", type="primary")
-    if sent:
-        body = {"device_id": device_id, "trust_value": trust, "threshold": threshold, "reason_code": reason,
-                "attack_class": attack, "confidence": confidence, "evidence": evidence}
-        with st.spinner("Endorsing, ordering and committing..."):
-            code, res = call("POST", "/v1/trust", body)
-        show_result(code, res)
-        if code == 200:
-            st.cache_data.clear()
-            _, dev = call("GET", f"/v1/devices/{device_id}")
-            if isinstance(dev, dict) and "status" in dev:
-                st.metric(f"{device_id} status now", dev["status"], f"trust {dev['trustValue']} / threshold {dev['threshold']}")
-            st.code(f"evidenceHash = {hashlib.sha256(evidence.encode()).hexdigest()}", language="text")
-
-
 def page_member1():
-    st.title("Member 1 trust engine -> ledger")
-    st.caption("Runs 'Trust Score/feed_trust.py': Member 1's adaptive engine computes every trust value "
-               "and threshold, and each decision is written to the ledger through the bridge.")
+    st.title("Trust Engine", anchor=False)
     if not FEEDER.exists():
         st.error(f"Not found: {FEEDER}. Copy the 'Trust Score' folder into the blockchain folder.")
         return
     with st.form("feed"):
         c1, c2, c3 = st.columns(3)
-        scenario = c1.selectbox("Scenario", SCENARIOS, index=1,
-                                help="burst = obvious attack; the others are Member 1's evasive attackers")
-        mode = c2.selectbox("Engine mode", ["adaptive", "static"],
-                            help="static = fixed threshold, for comparison")
+        scenario = c1.selectbox("Scenario", SCENARIOS, index=1, format_func=NICE.get,
+                                help="Burst = obvious attack; the others are evasive attackers")
+        mode = c2.selectbox("Engine mode", ["adaptive", "static"], format_func=NICE.get,
+                            help="Static = fixed threshold, for comparison")
         steps = c3.number_input("Steps (cycles)", 3, 60, 15)
         devices = c1.number_input("Devices (dev-001..dev-N)", 3, 254, 24)
         attackers = c2.number_input("Attackers", 0, 50, 3)
         offline = c3.checkbox("Offline (do not write to the ledger)", value=False)
         run = st.form_submit_button("Run", type="primary")
     if not run:
-        st.info("Tip: run 'slow_drift' with static, then with adaptive (offline is quick). Static misses "
-                "the evasive attackers; Member 1's adaptive engine catches them.")
         return
     args = [sys.executable, str(FEEDER), "--scenario", scenario, "--mode", mode, "--steps", str(steps),
             "--devices", str(devices), "--attackers", str(attackers)]
@@ -397,26 +323,72 @@ def page_member1():
     st.code(p.stdout[-6000:], language="text")
 
 
+def number_or_none(text):
+    """A number from 0 to 100 typed in a box, or None if it is empty or not valid."""
+    try:
+        value = float(str(text).strip())
+    except ValueError:
+        return None
+    return value if math.isfinite(value) and 0 <= value <= 100 else None
+
+
+def register_with_trust(device_id, dtype, crit, ip, trust, threshold):
+    """Register the device; then, if needed, record the typed trust value and threshold."""
+    with st.spinner("Committing..."):
+        code, res = call("POST", "/v1/devices", {"device_id": device_id, "device_type": dtype,
+                                                 "criticality": crit, "network_address": ip})
+        show_result(code, res)
+        if code != 200:
+            return
+        st.cache_data.clear()
+        # The contract starts a new device at trust 100 with a threshold from its criticality.
+        # Other values are recorded as a second transaction (reason MANUAL).
+        _, dev = call("GET", f"/v1/devices/{device_id}")
+        start_threshold = float(dev.get("threshold", 70)) if isinstance(dev, dict) else 70.0
+        if threshold is None:
+            threshold = start_threshold
+        if trust != 100.0 or threshold != start_threshold:
+            code, res = call("POST", "/v1/trust", {
+                "device_id": device_id, "trust_value": trust, "threshold": threshold,
+                "reason_code": "MANUAL", "evidence": "trust value set at registration"})
+            if code != 200:
+                st.error(f"Registered, but the trust value was not saved (HTTP {code}): {error_text(res)}")
+        _, dev = call("GET", f"/v1/devices/{device_id}")
+        if isinstance(dev, dict) and "status" in dev:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Trust value", dev["trustValue"])
+            m2.metric("Threshold", dev["threshold"])
+            m3.metric("Status", dev["status"])
+
+
 def page_register():
-    st.title("Register or move a device")
-    st.caption("Administrator only. If the connector runs as trustengine1, the contract answers 'access denied'.")
+    st.title("Register Device", anchor=False)
     c1, c2 = st.columns(2)
     with c1, st.form("register"):
-        st.subheader("Register")
+        st.subheader("Register", anchor=False)
         device_id = st.text_input("Device ID", "dev-030")
         dtype = st.selectbox("Type", DEVICE_TYPES)
         crit = st.slider("Criticality (1 low - 5 high)", 1, 5, 4)
         ip = st.text_input("IPv4 address", "192.168.10.30")
+        trust_text = st.text_input("Trust value (0 - 100)", "100")
+        threshold_text = st.text_input("Threshold (0 - 100)", "",
+                                       placeholder="Empty = set from criticality")
         go = st.form_submit_button("Register on the ledger", type="primary")
     if go:
-        with c1, st.spinner("Committing..."):
-            code, res = call("POST", "/v1/devices", {"device_id": device_id, "device_type": dtype,
-                                                     "criticality": crit, "network_address": ip})
-            show_result(code, res)
-            if code == 200:
-                st.cache_data.clear()
+        with c1:
+            # Check both numbers before anything is written to the ledger.
+            trust, threshold, problems = number_or_none(trust_text), number_or_none(threshold_text), []
+            if trust is None:
+                problems.append("Trust value must be a number from 0 to 100.")
+            if threshold_text.strip() and threshold is None:
+                problems.append("Threshold must be a number from 0 to 100, or empty.")
+            if problems:
+                for msg in problems:
+                    st.error(msg)
+            else:
+                register_with_trust(device_id, dtype, crit, ip, trust, threshold)
     with c2, st.form("move"):
-        st.subheader("Change IP address")
+        st.subheader("Change IP address", anchor=False)
         df, _ = fleet_frame()
         mid = st.selectbox("Device", list(df["deviceId"]) if not df.empty else ["dev-001"])
         new_ip = st.text_input("New IPv4 address", "192.168.10.31")
@@ -430,8 +402,7 @@ def page_register():
 
 
 def page_security():
-    st.title("Security tests")
-    st.caption("Each request below must be REFUSED. None of them changes the ledger.")
+    st.title("Security Alerts", anchor=False)
     tests = [
         ("No API key", "GET", "/v1/devices/dev-001", None, None, False, None, (401,)),
         ("Wrong API key", "GET", "/v1/devices/dev-001", None, None, True, "wrong-key", (401,)),
@@ -451,43 +422,28 @@ def page_security():
         ("Trust for an unknown device", "POST", "/v1/trust",
          {"device_id": "dev-999", "trust_value": 50, "threshold": 70, "reason_code": "AI_ANOMALY"}, None, True, None, (400, 404)),
     ]
-    if st.button("Run all security tests", type="primary"):
-        rows = []
-        with st.spinner("Running..."):
-            for name, method, path, body, raw, key, api_key, expect in tests:
-                code, res = call(method, path, body, key=key, raw=raw, api_key=api_key)
-                rows.append({"Test": name, "Expected": " or ".join(map(str, expect)), "Got": code,
-                             "Result": "PASS" if code in expect else "FAIL", "Message": error_text(res)[:120]})
-        out = pd.DataFrame(rows)
-        passed = int((out["Result"] == "PASS").sum())
-        (st.success if passed == len(rows) else st.warning)(f"{passed}/{len(rows)} refused as expected")
-        st.dataframe(out, use_container_width=True, hide_index=True)
-        st.caption("The bridge checks the key and every value; the smart contract checks them again.")
-
-
-def page_member4():
-    st.title("Member 4: look up a device by IP")
-    st.caption("GET /v1/devices/by-address/{ip}: one key lookup in the ledger's address index. "
-               "The identity hash is never returned (data minimisation).")
-    ip = st.text_input("IPv4 address", "192.168.10.1")
-    if st.button("Look up", type="primary"):
-        try:
-            ipaddress.IPv4Address(ip)
-        except ValueError:
-            st.warning("Not a valid IPv4 address; the bridge will refuse it (400).")
-        code, res = call("GET", f"/v1/devices/by-address/{ip}")
-        show_result(code, res)
-        if code == 200:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Device", res["deviceId"])
-            c2.metric("Type", res["deviceType"])
-            c3.metric("Status", res["status"], f"trust {res['trustValue']}")
+    # The checks run as soon as the page opens. None of these requests changes the ledger.
+    rows = []
+    with st.spinner("Checking..."):
+        for name, method, path, body, raw, key, api_key, expect in tests:
+            code, res = call(method, path, body, key=key, raw=raw, api_key=api_key)
+            rows.append({"name": name, "code": code, "blocked": code in expect,
+                         "expect": " or ".join(map(str, expect)), "msg": error_text(res)[:120]})
+    blocked = sum(r["blocked"] for r in rows)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Attacks tried", len(rows))
+    c2.metric("Blocked", blocked)
+    c3.metric("Not blocked", len(rows) - blocked)
+    # One alert per line, as a list.
+    for i, r in enumerate(rows, 1):
+        if r["blocked"]:
+            st.success(f"**{i}. {r['name']}** · Blocked · HTTP {r['code']} · {r['msg']}")
+        else:
+            st.error(f"**{i}. {r['name']}** · NOT blocked · HTTP {r['code']} (expected {r['expect']}) · {r['msg']}")
 
 
 def page_couch():
-    st.title("Org1 vs Org2: both copies of the ledger state")
-    st.caption("Read-only view of each organisation's CouchDB world state. Both must be identical. "
-               "CouchDB is only the latest state; the blocks are the source of truth.")
+    st.title("Org1 vs Org2: both copies of the ledger state", anchor=False)
     s = st.session_state
     df, _ = fleet_frame()
     device_id = st.selectbox("Device", list(df["deviceId"]) if not df.empty else ["dev-001"])
@@ -510,154 +466,17 @@ def page_couch():
             "Both organisations hold the same record." if same else
             "The copies DIFFER: one CouchDB was changed outside the smart contract.")
         st.dataframe(table, use_container_width=True, hide_index=True)
-    st.subheader("Documents in each world state")
+    st.subheader("Documents in each world state", anchor=False)
     cols = st.columns(2)
     for col, (label, base) in zip(cols, (("Org1", s.couch1), ("Org2", s.couch2))):
         code, info = couch(base, "/ztiotchannel_ztiot")
         col.metric(f"{label}: ztiotchannel_ztiot documents", info.get("doc_count", "?") if code == 200 else "unreachable")
-    st.caption("Documents = device records + address index entries + trust events + 1 CouchDB index.")
 
 
-def read_sources(device_id):
-    """What each source says about one device: both CouchDBs, the blocks (history) and the peer."""
-    s = st.session_state
-    out = {}
-    for label, base in (("Org1 CouchDB (edited by the attacker)", s.couch1), ("Org2 CouchDB", s.couch2)):
-        code, doc = couch(base, f"/ztiotchannel_ztiot/DEVICE_{device_id}")
-        out[label] = doc if code == 200 else None
-    code, hist = call("GET", f"/v1/devices/{device_id}/history")
-    out["Ledger blocks (last committed transaction)"] = hist[-1]["record"] if code == 200 and hist else None
-    code, dev = call("GET", f"/v1/devices/{device_id}")
-    out["Peer answer (GetDevice through the bridge)"] = dev if code == 200 else None
-    return out
-
-
-def same_record(a, b):
-    if not a or not b:
-        return False
-    return (float(a.get("trustValue", -1)) == float(b.get("trustValue", -2))
-            and float(a.get("threshold", -1)) == float(b.get("threshold", -2))
-            and a.get("status") == b.get("status"))
-
-
-def page_tamper():
-    st.title("Tamper test")
-    st.caption("Plays an attacker with admin access to Org1's server: it edits Org1's CouchDB directly, "
-               "skipping the smart contract. Then it shows how the change is caught and why it cannot be used. "
-               "Use this on the test network only.")
-    s = st.session_state
-    df, _ = fleet_frame()
-    ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
-    suspects = list(df[df["status"] == "SUSPECT"]["deviceId"]) if not df.empty else []
-    device_id = st.selectbox("Device", ids, index=ids.index(suspects[0]) if suspects else 0,
-                             help="Pick a SUSPECT device: the attacker wants it to look ACTIVE.")
-    key = f"/ztiotchannel_ztiot/DEVICE_{device_id}"
-
-    c1, c2 = st.columns(2)
-    fake_trust = c1.number_input("Fake trust value", 0.0, 100.0, 95.0, 1.0)
-    fake_status = c2.selectbox("Fake status", ["ACTIVE", "SUSPECT"])
-    b1, b2, b3 = st.columns(3)
-    tamper = b1.button("Step 1: Edit Org1's CouchDB", type="primary", use_container_width=True)
-    write = b2.button("Step 2: Try a real transaction", use_container_width=True)
-    restore = b3.button("Step 3: Restore Org1 from Org2", use_container_width=True)
-
-    if tamper:
-        code, doc = couch(s.couch1, key)
-        if code != 200:
-            st.error(f"Cannot read Org1's CouchDB ({code}). Check the CouchDB login in Connection settings.")
-        else:
-            doc["trustValue"], doc["status"] = fake_trust, fake_status   # "~version" is left as it was
-            code, res = couch_put(s.couch1, key, doc)
-            if code in (200, 201):
-                st.warning(f"Org1's CouchDB now says {device_id} has trust {fake_trust} and is {fake_status}. "
-                           "No transaction, no endorsement, no block: a direct database edit.")
-            else:
-                st.error(f"CouchDB refused the edit ({code}): {res}")
-        st.cache_data.clear()
-
-    if write:
-        src = read_sources(device_id)
-        real = src["Ledger blocks (last committed transaction)"] or src["Org2 CouchDB"]
-        if not real:
-            st.error("Cannot read the ledger history for this device.")
-        else:
-            body = {"device_id": device_id, "trust_value": float(real["trustValue"]),
-                    "threshold": float(real["threshold"]), "reason_code": "MANUAL",
-                    "evidence": "tamper test"}
-            with st.spinner("Asking both organisations to endorse a normal trust update..."):
-                code, res = call("POST", "/v1/trust", body)
-            after = read_sources(device_id)
-            org1, org2 = after["Org1 CouchDB (edited by the attacker)"], after["Org2 CouchDB"]
-            if code != 200:
-                st.success("REFUSED. Org1's peer read the edited value and Org2's peer read the real one, so "
-                           "their endorsements did not match and no block was made. A tampered copy cannot "
-                           "be used to write anything.")
-                st.caption(f"HTTP {code}: {error_text(res)[:300]}")
-            elif same_record(org1, org2):
-                st.success("ACCEPTED, and the new block overwrote Org1's edited copy. Org1's peer still used "
-                           "the true value (Fabric keeps recent state in memory), so both endorsements matched. "
-                           "Both organisations agree again: the edit did not survive.")
-            else:
-                st.warning("ACCEPTED, but Org1's copy still differs. Use Step 3 to restore it.")
-        st.cache_data.clear()
-
-    if restore:
-        c_1, org1 = couch(s.couch1, key)
-        c_2, org2 = couch(s.couch2, key)
-        if c_1 != 200 or c_2 != 200:
-            st.error("Cannot read both CouchDBs.")
-        else:
-            fixed = {k: v for k, v in org2.items() if k != "_rev"}
-            fixed["_rev"] = org1["_rev"]
-            code, res = couch_put(s.couch1, key, fixed)
-            (st.success if code in (200, 201) else st.error)(
-                "Org1's copy restored from Org2." if code in (200, 201) else f"Restore failed ({code}): {res}")
-        st.cache_data.clear()
-
-    # ---- what every source says now ----
-    st.subheader(f"What each source says about {device_id} now")
-    src = read_sources(device_id)
-    rows = []
-    for label, rec in src.items():
-        rows.append({"Source": label,
-                     "Trust": rec.get("trustValue") if rec else "unreadable",
-                     "Threshold": rec.get("threshold") if rec else "",
-                     "Status": rec.get("status") if rec else "",
-                     "~version": rec.get("~version", "") if rec else ""})
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-    org1 = src["Org1 CouchDB (edited by the attacker)"]
-    org2 = src["Org2 CouchDB"]
-    blocks = src["Ledger blocks (last committed transaction)"]
-    if same_record(org1, org2) and same_record(org1, blocks):
-        st.success("All copies agree with the blocks. Nothing has been tampered with.")
-    else:
-        if not same_record(org1, org2):
-            st.error("DETECTED: Org1's copy does not match Org2's copy.")
-        if not same_record(org1, blocks):
-            st.error("DETECTED: Org1's copy does not match the last committed block (the history database "
-                     "is built from the blocks, not from CouchDB).")
-        st.caption("The ~version did not change: the edit did not come from a transaction.")
-
-    with st.expander("Why this is tamper proof"):
-        st.markdown(
-            "- CouchDB is only a **copy of the latest state** on one server. The source of truth is the **blocks**, "
-            "which are hash-chained and held by every peer.\n"
-            "- Changing one copy does not change the other organisation's copy or the blocks, so it is caught "
-            "by comparing them.\n"
-            "- Every new write needs **both** organisations to endorse it. If one peer works on edited data the "
-            "endorsements differ and the write is refused; if it does not, the next block overwrites the edit.\n"
-            "- A peer's state can be rebuilt from the blocks at any time (`peer node rebuild-dbs`).\n"
-            "- To show the blocks are the same on both peers, run `peer channel getinfo -c ztiotchannel` "
-            "as Org1 and as Org2: same height and same current block hash.")
-
-
-# --------------------------------------------------------------------------
 
 PAGES = {
-    "Fleet overview": page_fleet, "Device detail": page_device, "Send trust value": page_send_trust,
-    "Member 1 trust engine": page_member1, "Register / move device": page_register,
-    "Security tests": page_security, "Member 4 IP lookup": page_member4, "Org1 vs Org2 (CouchDB)": page_couch,
-    "Tamper test": page_tamper,
+    "Overview": page_fleet, "Device Detail": page_device, "Trust Engine": page_member1,
+    "Register Device": page_register, "Security Alerts": page_security,
+    "Org1 vs Org2 (CouchDB)": page_couch,
 }
 PAGES[sidebar()]()
