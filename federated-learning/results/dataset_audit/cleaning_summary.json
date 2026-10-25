@@ -1,0 +1,179 @@
+{
+    "original_records": 5491971,
+    "cleaned_records": 5357406,
+    "removed_records": 134565,
+    "removal_percentage": 2.4502,
+    "class_comparison": {
+        "DDoS-ACK_Fragmentation": {
+            "before": 33581,
+            "after": 32781,
+            "removed": 800
+        },
+        "DDoS-PSHACK_Flood": {
+            "before": 481254,
+            "after": 469502,
+            "removed": 11752
+        },
+        "Mirai-greeth_flood": {
+            "before": 116133,
+            "after": 113366,
+            "removed": 2767
+        },
+        "DoS-SYN_Flood": {
+            "before": 237573,
+            "after": 231748,
+            "removed": 5825
+        },
+        "DDoS-TCP_Flood": {
+            "before": 528499,
+            "after": 515528,
+            "removed": 12971
+        },
+        "BenignTraffic": {
+            "before": 129538,
+            "after": 126395,
+            "removed": 3143
+        },
+        "DDoS-SynonymousIP_Flood": {
+            "before": 422083,
+            "after": 411697,
+            "removed": 10386
+        },
+        "DoS-UDP_Flood": {
+            "before": 390422,
+            "after": 380860,
+            "removed": 9562
+        },
+        "Recon-HostDiscovery": {
+            "before": 15737,
+            "after": 15340,
+            "removed": 397
+        },
+        "DDoS-ICMP_Fragmentation": {
+            "before": 53046,
+            "after": 51754,
+            "removed": 1292
+        },
+        "Recon-PortScan": {
+            "before": 9648,
+            "after": 9407,
+            "removed": 241
+        },
+        "DNS_Spoofing": {
+            "before": 21214,
+            "after": 20702,
+            "removed": 512
+        },
+        "DoS-HTTP_Flood": {
+            "before": 8487,
+            "after": 8267,
+            "removed": 220
+        },
+        "DDoS-SlowLoris": {
+            "before": 2757,
+            "after": 2691,
+            "removed": 66
+        },
+        "DictionaryBruteForce": {
+            "before": 1541,
+            "after": 1488,
+            "removed": 53
+        },
+        "VulnerabilityScan": {
+            "before": 4396,
+            "after": 4289,
+            "removed": 107
+        },
+        "Recon-PingSweep": {
+            "before": 249,
+            "after": 245,
+            "removed": 4
+        },
+        "XSS": {
+            "before": 414,
+            "after": 406,
+            "removed": 8
+        },
+        "CommandInjection": {
+            "before": 620,
+            "after": 609,
+            "removed": 11
+        },
+        "Backdoor_Malware": {
+            "before": 392,
+            "after": 388,
+            "removed": 4
+        },
+        "SqlInjection": {
+            "before": 590,
+            "after": 580,
+            "removed": 10
+        },
+        "BrowserHijacking": {
+            "before": 665,
+            "after": 646,
+            "removed": 19
+        },
+        "Uploading_Attack": {
+            "before": 140,
+            "after": 139,
+            "removed": 1
+        },
+        "DDoS-SYN_Flood": {
+            "before": 478653,
+            "after": 466978,
+            "removed": 11675
+        },
+        "DDoS-ICMP_Flood": {
+            "before": 848088,
+            "after": 827284,
+            "removed": 20804
+        },
+        "DDoS-UDP_Flood": {
+            "before": 637558,
+            "after": 622030,
+            "removed": 15528
+        },
+        "Mirai-greip_flood": {
+            "before": 88821,
+            "after": 86596,
+            "removed": 2225
+        },
+        "Mirai-udpplain": {
+            "before": 104814,
+            "after": 102301,
+            "removed": 2513
+        },
+        "DoS-TCP_Flood": {
+            "before": 314174,
+            "after": 306329,
+            "removed": 7845
+        },
+        "DDoS-RSTFINFlood": {
+            "before": 475441,
+            "after": 463757,
+            "removed": 11684
+        },
+        "DDoS-UDP_Fragmentation": {
+            "before": 34169,
+            "after": 33323,
+            "removed": 846
+        },
+        "DDoS-HTTP_Flood": {
+            "before": 3371,
+            "after": 3291,
+            "removed": 80
+        },
+        "MITM-ArpSpoofing": {
+            "before": 36316,
+            "after": 35394,
+            "removed": 922
+        },
+        "Recon-OSScan": {
+            "before": 11587,
+            "after": 11295,
+            "removed": 292
+        }
+    },
+    "method": "Exact full-row DISTINCT using CSV string values; original raw dataset preserved."
+}

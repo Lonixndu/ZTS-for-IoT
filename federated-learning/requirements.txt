@@ -1,0 +1,7 @@
+pandas>=2.2
+numpy>=2.0
+scikit-learn>=1.5
+duckdb>=1.0
+# CPU-only PyTorch (impact experiment):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.3

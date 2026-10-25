@@ -1,0 +1,15 @@
+# Big data — never commit (GBs; regenerate with preprocessing/)
+data/*
+!data/.gitignore
+datasets/
+
+# Generated
+history_backups/
+results/**/*.pt
+__pycache__/
+*.pyc
+
+# Virtual environments
+.niidlsd*/
+.venv/
+venv/

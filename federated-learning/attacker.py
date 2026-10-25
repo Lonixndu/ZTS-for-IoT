@@ -1,146 +1,112 @@
 """
-attacker.py
-Label Poisoning Attack Simulator
+attacker.py — Label Poisoning Attack Simulator
 
-Simulates a compromised FL client that flips attack labels → BENIGN
-before the local training round, to poison the federated model.
+Plays a compromised FL client: takes its local training data and relabels a share
+of the ATTACK rows as BENIGN before the training round, so the model learns that
+attack traffic is normal.
 
-Usage:
-  python attacker.py --input dataset_with_devices.csv --mode random
-  python attacker.py --input dataset_with_devices.csv --mode targeted \
-         --device camera --attack DDOS-HTTP_FLOOD
+    python attacker.py --input data/test.csv --output data/poisoned.csv
 
-Outputs:
-  data/poisoned_dataset.csv   — modified dataset with flipped labels
-  data/poison_log.json        — exact indices flipped (for detector verification)
+Writes the poisoned CSV to --output and the answer key (exactly which rows were
+flipped) to data/poison_log.json. niidlsd.py --mode detect grades itself against it.
+
+Flipped rows get the SAME benign label the file already uses ('BenignTraffic' in
+Member 2's data, 'BENIGN' in the MERGED version) — otherwise Member 2's training
+code, which selects label == "BenignTraffic", would never see the poison.
+
+Full research version (targeted mode, custom rates): attacker_full_backup.py.
 
 Author: IT23195370
 """
 
-import pandas as pd
-import json
 import argparse
-import random
+import json
 import os
+import random
 import time
 
-# ── Config ───────────────────────────────────────────────────────────
-OUTPUT_CSV  = "data/poisoned_dataset.csv"
-OUTPUT_LOG  = "data/poison_log.json"
-FLIP_RATE   = 0.10    # flip 10% of eligible attack rows
+import pandas as pd
 
-BENIGN_LABEL = "BENIGN"
+# ════════════════════════════════════════════════════════
+# CONFIGURATION
+# ════════════════════════════════════════════════════════
+FLIP_RATE  = 0.10                                  # share of attack rows relabelled BENIGN
+SEED       = 42                                    # same seed → same rows flipped every run
+POISON_LOG = os.path.join("data", "poison_log.json")
 
 
-def run_attack(args):
-    os.makedirs("data", exist_ok=True)
+def detect_schema(df):
+    """(label column, benign value) for this file."""
+    col = "Label" if "Label" in df.columns else ("label" if "label" in df.columns else None)
+    if col is None:
+        raise SystemExit("No 'Label' or 'label' column found")
+    values = set(df[col].astype(str).unique())
+    for v in ("BenignTraffic", "BENIGN"):
+        if v in values:
+            return col, v
+    for v in values:
+        if v.strip().upper() in ("BENIGN", "BENIGNTRAFFIC"):
+            return col, v
+    raise SystemExit(f"No benign label found in column '{col}'")
 
-    print(f"\n{'='*55}")
-    print(f"  ATTACKER — Label Poisoning Simulator")
-    print(f"  Mode: {args.mode.upper()}")
-    print(f"{'='*55}\n")
 
-    print(f"Loading: {args.input}")
+def main():
+    ap = argparse.ArgumentParser(description="Label poisoning attack simulator")
+    ap.add_argument("--input", required=True, help="Clean CSV (the client's training round)")
+    ap.add_argument("--output", required=True, help="Where to write the poisoned CSV")
+    args = ap.parse_args()
+
+    print("\n" + "=" * 55)
+    print("  ATTACKER — Label Poisoning Simulator")
+    print(f"  Flipping {FLIP_RATE*100:g}% of attack rows → BENIGN  (seed {SEED})")
+    print("=" * 55 + "\n")
+
     start = time.time()
     df = pd.read_csv(args.input)
-    print(f"  Loaded {len(df):,} rows  ({time.time()-start:.1f}s)\n")
+    label_col, benign = detect_schema(df)
+    print(f"  Loaded {len(df):,} rows  ({time.time()-start:.1f}s)")
+    print(f"  Label column '{label_col}', benign value '{benign}'")
 
-    attack_mask = df["Label"] != BENIGN_LABEL
+    random.seed(SEED)
+    attack_rows = df[df[label_col] != benign].index.tolist()
+    flip = random.sample(attack_rows, int(len(attack_rows) * FLIP_RATE))
+    print(f"  Attack rows: {len(attack_rows):,}   →   flipping {len(flip):,}")
 
-    if args.mode == "random":
-        eligible_indices = df[attack_mask].index.tolist()
-        n_flip = int(len(eligible_indices) * FLIP_RATE)
-        flip_indices = random.sample(eligible_indices, n_flip)
+    before = df.loc[flip, [label_col] + (["device_type"] if "device_type" in df else [])].copy()
+    df.loc[flip, label_col] = benign
 
-        print(f"  Total attack rows:  {len(eligible_indices):,}")
-        print(f"  Flip rate:          {FLIP_RATE*100:.0f}%")
-        print(f"  Rows to flip:       {n_flip:,}")
+    for path in (args.output, POISON_LOG):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    df.to_csv(args.output, index=False)
 
-    elif args.mode == "targeted":
-        if not args.device or not args.attack:
-            print("ERROR: --mode targeted requires --device and --attack")
-            print("  Example: --device camera --attack DDOS-HTTP_FLOOD")
-            return
+    with open(POISON_LOG, "w") as f:
+        json.dump({
+            "poisoned_csv":    args.output,
+            "clean_csv":       args.input,
+            "rows":            len(df),
+            "flip_rate":       FLIP_RATE,
+            "seed":            SEED,
+            "label_column":    label_col,
+            "benign_value":    benign,
+            "total_flipped":   len(flip),
+            "flipped_indices": [int(i) for i in flip],
+            "original_labels": {int(i): str(l) for i, l in before[label_col].items()},
+        }, f, indent=2)
 
-        targeted_mask = (
-            attack_mask &
-            (df["device_type"] == args.device) &
-            (df["Label"] == args.attack)
-        )
-        eligible_indices = df[targeted_mask].index.tolist()
+    print(f"\n  Saved poisoned data: {args.output}")
+    print(f"  Saved answer key:    {POISON_LOG}")
 
-        if not eligible_indices:
-            print(f"ERROR: No rows found for device={args.device}, label={args.attack}")
-            return
+    print("\n  Flipped, by original label:")
+    for label, n in before[label_col].value_counts().items():
+        print(f"    {label:<32} {n:>8,}")
+    if "device_type" in before:
+        print("\n  Flipped, by device:")
+        for dev, n in before["device_type"].value_counts().items():
+            print(f"    {dev:<32} {n:>8,}")
 
-        n_flip = int(len(eligible_indices) * FLIP_RATE)
-        if n_flip == 0:
-            n_flip = min(50, len(eligible_indices))
-        flip_indices = random.sample(eligible_indices, n_flip)
-
-        print(f"  Target device:      {args.device}")
-        print(f"  Target attack:      {args.attack}")
-        print(f"  Eligible rows:      {len(eligible_indices):,}")
-        print(f"  Rows to flip:       {n_flip:,}")
-
-    else:
-        print(f"ERROR: Unknown mode '{args.mode}'. Use 'random' or 'targeted'.")
-        return
-
-    # ── Apply flips ───────────────────────────────────────────────────
-    poisoned_df = df.copy()
-    original_labels = {int(idx): str(df.at[idx, "Label"]) for idx in flip_indices}
-    poisoned_df.loc[flip_indices, "Label"] = BENIGN_LABEL
-
-    # ── Save poisoned dataset ─────────────────────────────────────────
-    poisoned_df.to_csv(OUTPUT_CSV, index=False)
-    print(f"\n  Saved poisoned dataset: {OUTPUT_CSV}")
-
-    # ── Save poison log ───────────────────────────────────────────────
-    log = {
-        "mode":            args.mode,
-        "flip_rate":       FLIP_RATE,
-        "total_flipped":   len(flip_indices),
-        "flipped_indices": [int(i) for i in flip_indices],
-        "original_labels": original_labels,
-        "device_filter":   args.device  if args.mode == "targeted" else "all",
-        "attack_filter":   args.attack  if args.mode == "targeted" else "all",
-    }
-    with open(OUTPUT_LOG, "w") as f:
-        json.dump(log, f, indent=2)
-    print(f"  Saved poison log:       {OUTPUT_LOG}")
-
-    # ── Summary ───────────────────────────────────────────────────────
-    print(f"\n{'='*55}")
-    print(f"  ATTACK COMPLETE")
-    print(f"{'='*55}")
-    print(f"  Rows flipped (attack -> BENIGN): {len(flip_indices):,}")
-
-    flipped_df = df.loc[flip_indices]
-    print(f"\n  Flipped label breakdown:")
-    for label, count in flipped_df["Label"].value_counts().items():
-        print(f"    {label:<40} {count:>6,}")
-
-    print(f"\n  Flipped device breakdown:")
-    for dtype, count in flipped_df["device_type"].value_counts().items():
-        print(f"    {dtype:<20} {count:>6,}")
-
-    print(f"\n  Now run the detector:")
-    print(f"    python niidlsd.py --mode detect \\")
-    print(f"           --input data/poisoned_dataset.csv \\")
-    print(f"           --output data/clean_output.csv \\")
-    print(f"           --log    data/poison_log.json")
-    print()
+    print(f"\n  Next: python niidlsd.py --mode detect --input {args.output} "
+          f"--output data/cleaned.csv\n")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Label poisoning attack simulator")
-    parser.add_argument("--input",  required=True,        help="Path to dataset_with_devices.csv")
-    parser.add_argument("--mode",   default="random",     help="random | targeted")
-    parser.add_argument("--device", default=None,         help="[targeted] device type to attack")
-    parser.add_argument("--attack", default=None,         help="[targeted] exact attack label to flip")
-    parser.add_argument("--seed",   type=int, default=42, help="Random seed for reproducibility")
-    args = parser.parse_args()
-
-    random.seed(args.seed)
-    run_attack(args)
+    main()
