@@ -8,7 +8,9 @@ from typing import Optional # marks a value that may be missing (None)
  
 # Third-party libraries
 import httpx # async HTTP client, used to call the connector
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
  
 # Settings
@@ -48,6 +50,15 @@ async def lifespan(_app):
  
 # Create the web application. The title and version appear on the /docs page.
 app = FastAPI(title="Trust ledger service interface", version="1.0", lifespan=lifespan)
+
+
+# Bad request bodies are answered with a short 422 message. The submitted value
+# is not echoed back: it may be NaN, which is not valid JSON and would make the
+# default handler fail with a 500 error.
+@app.exception_handler(RequestValidationError)
+async def validation_error(_request: Request, exc: RequestValidationError):
+    errors = [{"loc": list(e.get("loc", [])), "msg": e.get("msg", "invalid value")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
  
 # Security
  
@@ -116,11 +127,11 @@ class DeviceRegistration(BaseModel):
 class TrustUpdate(BaseModel):
     # Body of POST /v1/trust (sent by Member 1's trust engine)
     device_id: str = Field(pattern=DEVICE_ID)
-    trust_value: float = Field(ge=0, le=100) # new trust score, 0 to 100
-    threshold: float = Field(ge=0, le=100)  # below this score the device is restricted
+    trust_value: float = Field(ge=0, le=100, allow_inf_nan=False) # new trust score, 0 to 100; NaN and Infinity refused
+    threshold: float = Field(ge=0, le=100, allow_inf_nan=False)  # below this score the device is restricted
     reason_code: str # must be in REASON_CODES (checked below)
     attack_class: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9_.:-]*$")  # optional label from Member 2
-    confidence: float = Field(default=0.0, ge=0, le=1) # optional AI confidence, 0 to 1
+    confidence: float = Field(default=0.0, ge=0, le=1, allow_inf_nan=False) # optional AI confidence, 0 to 1
     evidence: str = Field(default="", max_length=8192) # optional notes; length limit stops huge records
  
     @field_validator("reason_code")

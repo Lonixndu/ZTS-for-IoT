@@ -350,3 +350,16 @@ func TestManyTransactions(t *testing.T) {
 		t.Fatalf("want 250 events, got %d (last event %q)", len(evs), s.LastEvent)
 	}
 }
+
+// TC-17: non-finite or malformed numbers are refused instead of crashing the
+// chaincode (the contract API library panics on "NaN" for float64 parameters,
+// so RecordTrustValue takes numbers as text and checks them with parseNumber).
+func TestNumbersCannotCrashTheContract(t *testing.T) {
+	cc, s := newLedger(t)
+	register(t, cc, s, "dev-001", "camera", "4", "10.1.1.1")
+	for _, bad := range []string{"NaN", "Inf", "-Inf", "1e309", "0x10", ""} {
+		fails(t, cc, s, trustEngine, "trust value must be between", "TrustContract:RecordTrustValue", "dev-001", bad, "70", "", "MANUAL", "x", "0")
+		fails(t, cc, s, trustEngine, "threshold must be between", "TrustContract:RecordTrustValue", "dev-001", "50", bad, "", "MANUAL", "x", "0")
+		fails(t, cc, s, trustEngine, "confidence must be between", "TrustContract:RecordTrustValue", "dev-001", "50", "70", "", "MANUAL", "x", bad)
+	}
+}
