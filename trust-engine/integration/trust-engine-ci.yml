@@ -1,0 +1,32 @@
+name: Trust engine tests
+on:
+  push:
+    paths: ['trust-engine/**', 'blockchain/bridge/**', '.github/workflows/trust-engine.yml']
+  pull_request:
+    paths: ['trust-engine/**', 'blockchain/bridge/**', '.github/workflows/trust-engine.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: trust-engine
+    env:
+      BLOCKCHAIN_SOURCE_DIR: ${{ github.workspace }}/blockchain
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            trust-engine/requirements.txt
+            trust-engine/requirements-dev.txt
+            trust-engine/constraints-lock.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: python simulation.py --devices-per-scenario 2 --rounds 10 --output results/ci

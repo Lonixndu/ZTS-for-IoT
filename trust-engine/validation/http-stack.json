@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "executed_at_utc": "2026-10-19T10:50:06.979149+00:00",
+  "environment": "local HTTP; supplied Go mock ledger; NOT Hyperledger Fabric",
+  "checks": [
+    "Go registration -> supplied bridge -> engine import",
+    "Member 2 event -> engine -> bridge -> real Go chaincode in mock ledger",
+    "Risk 0.878 exports trust 12.2/100",
+    "Three identical retries create zero additional Go ledger events",
+    "Quarantine latch remains SUSPECT after lower risk",
+    "Evidence hashes agree with actual Go ledger events",
+    "Restart restores state and deduplication without another chain write",
+    "Stale event rejected over HTTP",
+    "Wrong AI credential rejected over HTTP"
+  ],
+  "engine_actions": [
+    "allow",
+    "quarantine",
+    "quarantine"
+  ],
+  "engine_trust_values": [
+    0.9,
+    0.122,
+    0.99
+  ],
+  "ledger_values": [
+    90.0,
+    12.2,
+    73.99
+  ],
+  "ledger_event_count": 3,
+  "bridge_sha256": "0c9cdcc6a0c98bb4f9fde7d9a133cef4e60a992a37662ce2f6c2abdfe25ae705"
+}
