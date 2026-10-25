@@ -1,0 +1,663 @@
+"""
+ZTIoT Trust Ledger - Streamlit demo console for the blockchain component (Member 3).
+
+J26-CS-315 | Fernando M N (IT23248144)
+
+Everything goes through the same path the other members use:
+    dashboard -> bridge (127.0.0.1:8000, API key) -> connector -> Fabric smart contract
+The "Org1 vs Org2" page also reads the CouchDB world state directly (read only),
+to show that both organisations hold the same copy. The "Tamper test" page is the
+only place that writes to CouchDB directly: it plays an attacker on purpose.
+
+Run (from the blockchain folder, venv active):
+    pip install -r dashboard/requirements.txt
+    cd dashboard && streamlit run app.py
+Then open http://127.0.0.1:8501
+"""
+
+import hashlib
+import ipaddress
+import os
+import re
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import altair as alt
+import httpx
+import pandas as pd
+import streamlit as st
+
+ROOT = Path(__file__).resolve().parents[1]                 # the blockchain folder
+FEEDER = ROOT / "Trust Score" / "feed_trust.py"            # Member 1 engine -> ledger
+DEVICE_TYPES = ["camera", "sensor", "actuator", "gateway", "meter", "lock"]
+REASON_CODES = ["AI_ANOMALY", "POLICY_VIOLATION", "RECOVERY", "MANUAL"]
+SCENARIOS = ["burst", "slow_drift", "fixed_margin", "randomised"]
+NAVY, ORANGE, GREEN, RED = "#000080", "#FF7000", "#1B7F3B", "#C62828"
+STATUS_COLOURS = alt.Scale(domain=["ACTIVE", "SUSPECT"], range=[GREEN, RED])
+
+st.set_page_config(page_title="ZTIoT Trust Ledger", page_icon="🛡️", layout="wide")
+
+
+# --------------------------------------------------------------------------
+# Settings (sidebar)
+# --------------------------------------------------------------------------
+
+def sidebar():
+    st.sidebar.title("ZTIoT Trust Ledger")
+    st.sidebar.caption("Member 3: Blockchain and Smart Contract Policy Enforcement")
+    s = st.session_state
+    s.setdefault("bridge", os.getenv("BLOCKCHAIN_URL", "http://127.0.0.1:8000"))
+    s.setdefault("key", os.getenv("BRIDGE_API_KEY", "dev-key"))
+    s.setdefault("couch1", "http://127.0.0.1:5984")
+    s.setdefault("couch2", "http://127.0.0.1:7984")
+    s.setdefault("couch_user", "admin")
+    s.setdefault("couch_pass", "adminpw")
+    with st.sidebar.expander("Connection settings"):
+        s.bridge = st.text_input("Bridge URL", s.bridge)
+        s.key = st.text_input("Bridge API key (x-api-key)", s.key, type="password")
+        s.couch1 = st.text_input("CouchDB Org1", s.couch1)
+        s.couch2 = st.text_input("CouchDB Org2", s.couch2)
+        s.couch_user = st.text_input("CouchDB user", s.couch_user)
+        s.couch_pass = st.text_input("CouchDB password", s.couch_pass, type="password")
+
+    code, body = call("GET", "/health", key=False)
+    if code == 200 and isinstance(body, dict):
+        conn = body.get("connector")
+        if isinstance(conn, dict) and conn.get("status") == "ok":
+            st.sidebar.success(f"Bridge ok · ledger: {conn.get('ledger', '?')}")
+            if conn.get("msp"):
+                st.sidebar.caption(f"channel {conn.get('channel')} · chaincode {conn.get('chaincode')} · {conn.get('msp')}")
+        else:
+            st.sidebar.warning("Bridge ok · connector unreachable (start npm start)")
+    else:
+        st.sidebar.error("Bridge not reachable (start uvicorn on port 8000)")
+
+    if st.sidebar.button("Refresh data", use_container_width=True):
+        st.cache_data.clear()
+    page = st.sidebar.radio("Page", [
+        "Fleet overview", "Device detail", "Send trust value", "Member 1 trust engine",
+        "Register / move device", "Security tests", "Member 4 IP lookup", "Org1 vs Org2 (CouchDB)",
+        "Tamper test",
+    ])
+    st.sidebar.caption("Every write goes through the smart contract and is endorsed by both organisations.")
+    return page
+
+
+# --------------------------------------------------------------------------
+# HTTP helpers
+# --------------------------------------------------------------------------
+
+def call(method, path, body=None, key=True, raw=None, api_key=None):
+    """Call the bridge. Returns (status code, parsed JSON or text). Never raises."""
+    headers = {}
+    if key:
+        headers["x-api-key"] = st.session_state.key if api_key is None else api_key
+    if raw is not None:
+        headers["Content-Type"] = "application/json"
+    try:
+        with httpx.Client(base_url=st.session_state.bridge.rstrip("/"), timeout=40, trust_env=False) as c:
+            r = c.request(method, path, json=body, content=raw, headers=headers)
+    except httpx.HTTPError as exc:
+        return 0, f"cannot reach the bridge: {exc.__class__.__name__}"
+    try:
+        return r.status_code, r.json()
+    except ValueError:
+        return r.status_code, r.text
+
+
+def couch(base, path, body=None):
+    """Read-only CouchDB request (GET, or POST for _find). Returns (code, json)."""
+    s = st.session_state
+    try:
+        with httpx.Client(base_url=base.rstrip("/"), timeout=10, trust_env=False,
+                          auth=(s.couch_user, s.couch_pass)) as c:
+            r = c.post(path, json=body) if body is not None else c.get(path)
+        return r.status_code, r.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return 0, {"error": str(exc)}
+
+
+def couch_put(base, path, doc):
+    """WRITE a document straight into CouchDB, bypassing the smart contract.
+    Used ONLY by the Tamper test page to play the attacker. Returns (code, json)."""
+    s = st.session_state
+    try:
+        with httpx.Client(base_url=base.rstrip("/"), timeout=10, trust_env=False,
+                          auth=(s.couch_user, s.couch_pass)) as c:
+            r = c.put(path, json=doc)
+        return r.status_code, r.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return 0, {"error": str(exc)}
+
+
+def error_text(body):
+    if isinstance(body, dict) and "detail" in body:
+        d = body["detail"]
+        if isinstance(d, list):
+            return "; ".join(f"{'.'.join(str(x) for x in e.get('loc', [])[1:])}: {e.get('msg')}" for e in d)
+        return str(d)
+    return str(body)
+
+
+def show_result(code, body, ok_codes=(200,)):
+    if code in ok_codes:
+        st.success(f"HTTP {code}")
+    else:
+        st.error(f"HTTP {code}: {error_text(body)}")
+    st.json(body if isinstance(body, (dict, list)) else {"response": body}, expanded=False)
+
+
+# --------------------------------------------------------------------------
+# Data loading (cached for a few seconds)
+# --------------------------------------------------------------------------
+
+@st.cache_data(ttl=5, show_spinner=False)
+def device_ids(couch1, user, password, fallback_n=24):
+    """List device IDs from Org1's world state; fall back to dev-001..dev-N."""
+    try:
+        with httpx.Client(base_url=couch1.rstrip("/"), timeout=10, trust_env=False, auth=(user, password)) as c:
+            r = c.post("/ztiotchannel_ztiot/_find",
+                       json={"selector": {"docType": "device"}, "fields": ["deviceId"], "limit": 1000})
+        ids = sorted(d["deviceId"] for d in r.json().get("docs", []) if "deviceId" in d)
+        if ids:
+            return ids, "CouchDB (Org1 world state)"
+    except (httpx.HTTPError, ValueError, KeyError):
+        pass
+    return [f"dev-{i:03d}" for i in range(1, fallback_n + 1)], "default list dev-001..dev-024"
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def load_devices(ids, bridge, key):
+    """Read every device through the bridge and the smart contract (in parallel)."""
+    def one(device_id):
+        try:
+            with httpx.Client(base_url=bridge.rstrip("/"), timeout=40, trust_env=False,
+                              headers={"x-api-key": key}) as c:
+                r = c.get(f"/v1/devices/{device_id}")
+            return r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            return None
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        rows = [d for d in pool.map(one, ids) if d]
+    return rows
+
+
+def fleet_frame():
+    s = st.session_state
+    ids, source = device_ids(s.couch1, s.couch_user, s.couch_pass)
+    rows = load_devices(tuple(ids), s.bridge, s.key)
+    df = pd.DataFrame(rows)
+    return df, source
+
+
+# --------------------------------------------------------------------------
+# Pages
+# --------------------------------------------------------------------------
+
+def page_fleet():
+    st.title("Fleet overview")
+    st.caption("Current state of every registered device, read through the smart contract (GetDevice).")
+    df, source = fleet_frame()
+    if df.empty:
+        st.warning("No devices found. Start the bridge and connector, then run simulator/register_devices.py.")
+        return
+    total, suspect = len(df), int((df["status"] == "SUSPECT").sum())
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Devices", total)
+    c2.metric("ACTIVE", total - suspect)
+    c3.metric("SUSPECT", suspect)
+    c4.metric("Average trust", f"{df['trustValue'].mean():.1f}")
+
+    chart = alt.Chart(df).mark_bar().encode(
+        x=alt.X("deviceId:N", sort=None, title="Device"),
+        y=alt.Y("trustValue:Q", title="Trust value", scale=alt.Scale(domain=[0, 100])),
+        color=alt.Color("status:N", scale=STATUS_COLOURS, title="Status"),
+        tooltip=["deviceId", "deviceType", "networkAddress", "trustValue", "threshold", "status"],
+    )
+    ticks = alt.Chart(df).mark_tick(color=NAVY, thickness=2, size=18).encode(
+        x=alt.X("deviceId:N", sort=None), y="threshold:Q", tooltip=["deviceId", "threshold"])
+    st.altair_chart((chart + ticks).properties(height=320), use_container_width=True)
+    st.caption("Bars = current trust. Dark ticks = each device's threshold. Below the tick = SUSPECT.")
+
+    cols = ["deviceId", "deviceType", "criticality", "networkAddress", "trustValue", "threshold",
+            "status", "updateCount", "dropCount", "lastUpdated"]
+    st.dataframe(df[[c for c in cols if c in df.columns]], use_container_width=True, hide_index=True)
+    st.caption(f"Device IDs listed from: {source}. Records read through the bridge and smart contract.")
+
+
+def page_device():
+    st.title("Device detail")
+    df, _ = fleet_frame()
+    ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
+    device_id = st.selectbox("Device", ids)
+    code, dev = call("GET", f"/v1/devices/{device_id}")
+    if code != 200:
+        st.error(f"HTTP {code}: {error_text(dev)}")
+        return
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Status", dev["status"])
+    c2.metric("Trust value", dev["trustValue"])
+    c3.metric("Threshold", dev["threshold"])
+    c4.metric("Type / criticality", f"{dev['deviceType']} / {dev['criticality']}")
+    c5.metric("IP address", dev["networkAddress"])
+
+    tab_hist, tab_events, tab_verify, tab_raw = st.tabs(
+        ["Trust over time (history)", "Trust events", "Verify evidence hash", "Raw record"])
+
+    with tab_hist:
+        code, hist = call("GET", f"/v1/devices/{device_id}/history")
+        if code == 200 and hist:
+            h = pd.DataFrame([{"time": e["timestamp"], "trust": e["record"]["trustValue"],
+                               "threshold": e["record"]["threshold"], "status": e["record"]["status"],
+                               "ip": e["record"]["networkAddress"], "txId": e["txId"]} for e in hist])
+            h["time"] = pd.to_datetime(h["time"], utc=True)
+            h["when"] = h["time"].dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            # Ledger times are UTC, so show them as UTC (not the browser's local time).
+            x = alt.X("time:T", title="Time (UTC)", scale=alt.Scale(type="utc"),
+                      axis=alt.Axis(format="%H:%M:%S", labelAngle=0, tickCount=8))
+            line = alt.Chart(h).mark_line(color=NAVY).encode(x=x,
+                                                             y=alt.Y("trust:Q", scale=alt.Scale(domain=[0, 100]), title="Trust"))
+            pts = alt.Chart(h).mark_circle(size=70).encode(
+                x=x, y="trust:Q", color=alt.Color("status:N", scale=STATUS_COLOURS),
+                tooltip=["when", "trust", "threshold", "status", "txId"])
+            thr = alt.Chart(h).mark_line(color=ORANGE, strokeDash=[6, 4]).encode(x=x, y="threshold:Q")
+            st.altair_chart((line + thr + pts).properties(height=300), use_container_width=True)
+            st.caption("Navy = trust, orange dashed = threshold. Each point is one committed transaction "
+                       "(version of the record), read from the peer's history database.")
+            st.dataframe(h[["when", "trust", "threshold", "status", "ip", "txId"]],
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("No history yet.")
+
+    with tab_events:
+        code, events = call("GET", f"/v1/devices/{device_id}/events")
+        if code == 200 and events:
+            e = pd.DataFrame(events)
+            cols = ["timestamp", "oldValue", "newValue", "delta", "reasonCode", "attackClass",
+                    "confidence", "evidenceHash", "eventId", "submitterMSP"]
+            st.dataframe(e[[c for c in cols if c in e.columns]], use_container_width=True, hide_index=True)
+            st.caption("Each trust change is a permanent event. Only the SHA-256 hash of the evidence is stored.")
+        else:
+            st.info("No trust events yet. Send a trust value first.")
+
+    with tab_verify:
+        st.write("Type the evidence text that was sent. Its SHA-256 must equal the hash stored on the ledger.")
+        text = st.text_input("Evidence text", "1200 ports in 60s")
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        st.code(f"sha256 = {digest}", language="text")
+        code, events = call("GET", f"/v1/devices/{device_id}/events")
+        matches = [ev for ev in (events if code == 200 else []) if ev.get("evidenceHash") == digest]
+        if matches:
+            st.success(f"Match: {len(matches)} trust event(s) on the ledger carry this hash "
+                       f"(latest at {matches[-1]['timestamp']}, tx {matches[-1]['eventId'][:16]}...).")
+        else:
+            st.warning("No event of this device has this hash. Any change to the text gives a different hash.")
+
+    with tab_raw:
+        st.json(dev)
+
+
+def page_send_trust():
+    st.title("Send a trust value")
+    st.caption("Stands in for Member 1's trust engine: POST /v1/trust. "
+               "The smart contract decides the status (trust < threshold -> SUSPECT).")
+    df, _ = fleet_frame()
+    ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
+    with st.form("trust"):
+        c1, c2 = st.columns(2)
+        device_id = c1.selectbox("Device", ids)
+        reason = c2.selectbox("Reason code", REASON_CODES)
+        trust = c1.slider("Trust value", 0.0, 100.0, 60.0, 0.5)
+        threshold = c2.number_input("Threshold", 0.0, 100.0, 70.0, 1.0)
+        attack = c1.text_input("Attack class (optional)", "port_scan")
+        confidence = c2.slider("AI confidence", 0.0, 1.0, 0.9, 0.05)
+        evidence = st.text_input("Evidence (only its SHA-256 is stored)", "1200 ports in 60s")
+        st.info(f"Expected decision: {'SUSPECT' if trust < threshold else 'ACTIVE'} "
+                f"({trust} {'<' if trust < threshold else '>='} {threshold})")
+        sent = st.form_submit_button("Send to the ledger", type="primary")
+    if sent:
+        body = {"device_id": device_id, "trust_value": trust, "threshold": threshold, "reason_code": reason,
+                "attack_class": attack, "confidence": confidence, "evidence": evidence}
+        with st.spinner("Endorsing, ordering and committing..."):
+            code, res = call("POST", "/v1/trust", body)
+        show_result(code, res)
+        if code == 200:
+            st.cache_data.clear()
+            _, dev = call("GET", f"/v1/devices/{device_id}")
+            if isinstance(dev, dict) and "status" in dev:
+                st.metric(f"{device_id} status now", dev["status"], f"trust {dev['trustValue']} / threshold {dev['threshold']}")
+            st.code(f"evidenceHash = {hashlib.sha256(evidence.encode()).hexdigest()}", language="text")
+
+
+def page_member1():
+    st.title("Member 1 trust engine -> ledger")
+    st.caption("Runs 'Trust Score/feed_trust.py': Member 1's adaptive engine computes every trust value "
+               "and threshold, and each decision is written to the ledger through the bridge.")
+    if not FEEDER.exists():
+        st.error(f"Not found: {FEEDER}. Copy the 'Trust Score' folder into the blockchain folder.")
+        return
+    with st.form("feed"):
+        c1, c2, c3 = st.columns(3)
+        scenario = c1.selectbox("Scenario", SCENARIOS, index=1,
+                                help="burst = obvious attack; the others are Member 1's evasive attackers")
+        mode = c2.selectbox("Engine mode", ["adaptive", "static"],
+                            help="static = fixed threshold, for comparison")
+        steps = c3.number_input("Steps (cycles)", 3, 60, 15)
+        devices = c1.number_input("Devices (dev-001..dev-N)", 3, 254, 24)
+        attackers = c2.number_input("Attackers", 0, 50, 3)
+        offline = c3.checkbox("Offline (do not write to the ledger)", value=False)
+        run = st.form_submit_button("Run", type="primary")
+    if not run:
+        st.info("Tip: run 'slow_drift' with static, then with adaptive (offline is quick). Static misses "
+                "the evasive attackers; Member 1's adaptive engine catches them.")
+        return
+    args = [sys.executable, str(FEEDER), "--scenario", scenario, "--mode", mode, "--steps", str(steps),
+            "--devices", str(devices), "--attackers", str(attackers)]
+    if offline:
+        args.append("--offline")
+    env = dict(os.environ, BRIDGE_API_KEY=st.session_state.key, BLOCKCHAIN_URL=st.session_state.bridge)
+    with st.status("Running Member 1 engine..." + ("" if offline else " (each cycle waits for Fabric commits)"),
+                   expanded=False) as status:
+        try:
+            p = subprocess.run(args, cwd=FEEDER.parent, env=env, capture_output=True, text=True, timeout=1800)
+        except subprocess.TimeoutExpired:
+            status.update(label="Timed out", state="error")
+            return
+        status.update(label="Finished" if p.returncode == 0 else "Finished with errors",
+                      state="complete" if p.returncode == 0 else "error")
+        st.code(p.stderr[-4000:] or "(no progress output)", language="text")
+    summary = re.search(r"attackers marked SUSPECT: (\d+)/(\d+)\s+normal devices marked SUSPECT: (\d+)/(\d+)", p.stdout)
+    if summary:
+        caught, total, fa, normal = map(int, summary.groups())
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Attackers caught (SUSPECT)", f"{caught}/{total}")
+        c2.metric("False alarms", f"{fa}/{normal}")
+        writes = re.search(r"ledger writes: (\d+) committed, (\d+) failed", p.stdout)
+        c3.metric("Ledger writes", f"{writes.group(1)} ok / {writes.group(2)} failed" if writes else "offline")
+    saved = re.search(r"decisions saved to (.+)", p.stderr)
+    if saved:
+        path = (FEEDER.parent / saved.group(1).strip()).resolve()
+        if path.exists():
+            d = pd.read_csv(path)
+            d["role"] = d["attacker"].map({True: "attacker", False: "normal"})
+            show = d[d["attacker"] | d["deviceId"].isin(d[~d["attacker"]]["deviceId"].unique()[:2])]
+            x = alt.X("step:Q", title="Cycle", axis=alt.Axis(format="d", tickMinStep=1))
+            role_colours = alt.Scale(domain=["attacker", "normal"], range=[RED, GREEN])
+            trust = alt.Chart(show).mark_line(point=True).encode(
+                x=x, y=alt.Y("trust:Q", scale=alt.Scale(domain=[0, 100]), title="Trust"),
+                color=alt.Color("role:N", scale=role_colours, title="Device role"), detail="deviceId:N",
+                tooltip=["deviceId", "role", "step", "trust", "threshold", "status", "engineReason"])
+            thr = alt.Chart(show[show["attacker"]]).mark_line(color=ORANGE, strokeDash=[6, 4], opacity=0.8).encode(
+                x=x, y="threshold:Q", detail="deviceId:N")
+            st.altair_chart((thr + trust).properties(height=320), use_container_width=True)
+            st.caption("Red = attackers, green = two normal devices, orange dashed = each attacker's adaptive "
+                       "threshold. When a red line drops below its orange line the device becomes SUSPECT.")
+    st.code(p.stdout[-6000:], language="text")
+
+
+def page_register():
+    st.title("Register or move a device")
+    st.caption("Administrator only. If the connector runs as trustengine1, the contract answers 'access denied'.")
+    c1, c2 = st.columns(2)
+    with c1, st.form("register"):
+        st.subheader("Register")
+        device_id = st.text_input("Device ID", "dev-030")
+        dtype = st.selectbox("Type", DEVICE_TYPES)
+        crit = st.slider("Criticality (1 low - 5 high)", 1, 5, 4)
+        ip = st.text_input("IPv4 address", "192.168.10.30")
+        go = st.form_submit_button("Register on the ledger", type="primary")
+    if go:
+        with c1, st.spinner("Committing..."):
+            code, res = call("POST", "/v1/devices", {"device_id": device_id, "device_type": dtype,
+                                                     "criticality": crit, "network_address": ip})
+            show_result(code, res)
+            if code == 200:
+                st.cache_data.clear()
+    with c2, st.form("move"):
+        st.subheader("Change IP address")
+        df, _ = fleet_frame()
+        mid = st.selectbox("Device", list(df["deviceId"]) if not df.empty else ["dev-001"])
+        new_ip = st.text_input("New IPv4 address", "192.168.10.31")
+        move = st.form_submit_button("Move device")
+    if move:
+        with c2, st.spinner("Committing..."):
+            code, res = call("PUT", f"/v1/devices/{mid}/address", {"network_address": new_ip})
+            show_result(code, res)
+            if code == 200:
+                st.cache_data.clear()
+
+
+def page_security():
+    st.title("Security tests")
+    st.caption("Each request below must be REFUSED. None of them changes the ledger.")
+    tests = [
+        ("No API key", "GET", "/v1/devices/dev-001", None, None, False, None, (401,)),
+        ("Wrong API key", "GET", "/v1/devices/dev-001", None, None, True, "wrong-key", (401,)),
+        ("Trust value 150 (out of range)", "POST", "/v1/trust",
+         {"device_id": "dev-001", "trust_value": 150, "threshold": 70, "reason_code": "AI_ANOMALY"}, None, True, None, (422,)),
+        ("Trust value NaN (crash found by negative testing)", "POST", "/v1/trust", None,
+         b'{"device_id":"dev-001","trust_value":NaN,"threshold":70,"reason_code":"AI_ANOMALY"}', True, None, (422,)),
+        ("Unknown reason code", "POST", "/v1/trust",
+         {"device_id": "dev-001", "trust_value": 50, "threshold": 70, "reason_code": "HACKED"}, None, True, None, (422,)),
+        ("Script in attack class", "POST", "/v1/trust",
+         {"device_id": "dev-001", "trust_value": 50, "threshold": 70, "reason_code": "AI_ANOMALY",
+          "attack_class": "<script>"}, None, True, None, (422,)),
+        ("Invalid IP address", "POST", "/v1/devices",
+         {"device_id": "dev-900", "device_type": "camera", "criticality": 4, "network_address": "999.1.1.1"}, None, True, None, (422,)),
+        ("Duplicate device (dev-001 again)", "POST", "/v1/devices",
+         {"device_id": "dev-001", "device_type": "lock", "criticality": 5, "network_address": "192.168.10.99"}, None, True, None, (400,)),
+        ("Trust for an unknown device", "POST", "/v1/trust",
+         {"device_id": "dev-999", "trust_value": 50, "threshold": 70, "reason_code": "AI_ANOMALY"}, None, True, None, (400, 404)),
+    ]
+    if st.button("Run all security tests", type="primary"):
+        rows = []
+        with st.spinner("Running..."):
+            for name, method, path, body, raw, key, api_key, expect in tests:
+                code, res = call(method, path, body, key=key, raw=raw, api_key=api_key)
+                rows.append({"Test": name, "Expected": " or ".join(map(str, expect)), "Got": code,
+                             "Result": "PASS" if code in expect else "FAIL", "Message": error_text(res)[:120]})
+        out = pd.DataFrame(rows)
+        passed = int((out["Result"] == "PASS").sum())
+        (st.success if passed == len(rows) else st.warning)(f"{passed}/{len(rows)} refused as expected")
+        st.dataframe(out, use_container_width=True, hide_index=True)
+        st.caption("The bridge checks the key and every value; the smart contract checks them again.")
+
+
+def page_member4():
+    st.title("Member 4: look up a device by IP")
+    st.caption("GET /v1/devices/by-address/{ip}: one key lookup in the ledger's address index. "
+               "The identity hash is never returned (data minimisation).")
+    ip = st.text_input("IPv4 address", "192.168.10.1")
+    if st.button("Look up", type="primary"):
+        try:
+            ipaddress.IPv4Address(ip)
+        except ValueError:
+            st.warning("Not a valid IPv4 address; the bridge will refuse it (400).")
+        code, res = call("GET", f"/v1/devices/by-address/{ip}")
+        show_result(code, res)
+        if code == 200:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Device", res["deviceId"])
+            c2.metric("Type", res["deviceType"])
+            c3.metric("Status", res["status"], f"trust {res['trustValue']}")
+
+
+def page_couch():
+    st.title("Org1 vs Org2: both copies of the ledger state")
+    st.caption("Read-only view of each organisation's CouchDB world state. Both must be identical. "
+               "CouchDB is only the latest state; the blocks are the source of truth.")
+    s = st.session_state
+    df, _ = fleet_frame()
+    device_id = st.selectbox("Device", list(df["deviceId"]) if not df.empty else ["dev-001"])
+    fields = ["deviceId", "deviceType", "networkAddress", "trustValue", "threshold", "status",
+              "updateCount", "lastUpdated", "~version"]
+    docs, rows = {}, []
+    for label, base in (("Org1 (couchdb0)", s.couch1), ("Org2 (couchdb1)", s.couch2)):
+        code, doc = couch(base, f"/ztiotchannel_ztiot/DEVICE_{device_id}")
+        docs[label] = doc if code == 200 else None
+        if code != 200:
+            st.error(f"{label}: cannot read ({doc.get('error') if isinstance(doc, dict) else code})")
+    if all(docs.values()):
+        a, b = docs.values()
+        for f in fields:
+            rows.append({"Field": f, "Org1": str(a.get(f)), "Org2": str(b.get(f)),
+                         "Same": "yes" if a.get(f) == b.get(f) else "NO"})
+        table = pd.DataFrame(rows)
+        same = (table["Same"] == "yes").all()
+        (st.success if same else st.error)(
+            "Both organisations hold the same record." if same else
+            "The copies DIFFER: one CouchDB was changed outside the smart contract.")
+        st.dataframe(table, use_container_width=True, hide_index=True)
+    st.subheader("Documents in each world state")
+    cols = st.columns(2)
+    for col, (label, base) in zip(cols, (("Org1", s.couch1), ("Org2", s.couch2))):
+        code, info = couch(base, "/ztiotchannel_ztiot")
+        col.metric(f"{label}: ztiotchannel_ztiot documents", info.get("doc_count", "?") if code == 200 else "unreachable")
+    st.caption("Documents = device records + address index entries + trust events + 1 CouchDB index.")
+
+
+def read_sources(device_id):
+    """What each source says about one device: both CouchDBs, the blocks (history) and the peer."""
+    s = st.session_state
+    out = {}
+    for label, base in (("Org1 CouchDB (edited by the attacker)", s.couch1), ("Org2 CouchDB", s.couch2)):
+        code, doc = couch(base, f"/ztiotchannel_ztiot/DEVICE_{device_id}")
+        out[label] = doc if code == 200 else None
+    code, hist = call("GET", f"/v1/devices/{device_id}/history")
+    out["Ledger blocks (last committed transaction)"] = hist[-1]["record"] if code == 200 and hist else None
+    code, dev = call("GET", f"/v1/devices/{device_id}")
+    out["Peer answer (GetDevice through the bridge)"] = dev if code == 200 else None
+    return out
+
+
+def same_record(a, b):
+    if not a or not b:
+        return False
+    return (float(a.get("trustValue", -1)) == float(b.get("trustValue", -2))
+            and float(a.get("threshold", -1)) == float(b.get("threshold", -2))
+            and a.get("status") == b.get("status"))
+
+
+def page_tamper():
+    st.title("Tamper test")
+    st.caption("Plays an attacker with admin access to Org1's server: it edits Org1's CouchDB directly, "
+               "skipping the smart contract. Then it shows how the change is caught and why it cannot be used. "
+               "Use this on the test network only.")
+    s = st.session_state
+    df, _ = fleet_frame()
+    ids = list(df["deviceId"]) if not df.empty else ["dev-001"]
+    suspects = list(df[df["status"] == "SUSPECT"]["deviceId"]) if not df.empty else []
+    device_id = st.selectbox("Device", ids, index=ids.index(suspects[0]) if suspects else 0,
+                             help="Pick a SUSPECT device: the attacker wants it to look ACTIVE.")
+    key = f"/ztiotchannel_ztiot/DEVICE_{device_id}"
+
+    c1, c2 = st.columns(2)
+    fake_trust = c1.number_input("Fake trust value", 0.0, 100.0, 95.0, 1.0)
+    fake_status = c2.selectbox("Fake status", ["ACTIVE", "SUSPECT"])
+    b1, b2, b3 = st.columns(3)
+    tamper = b1.button("Step 1: Edit Org1's CouchDB", type="primary", use_container_width=True)
+    write = b2.button("Step 2: Try a real transaction", use_container_width=True)
+    restore = b3.button("Step 3: Restore Org1 from Org2", use_container_width=True)
+
+    if tamper:
+        code, doc = couch(s.couch1, key)
+        if code != 200:
+            st.error(f"Cannot read Org1's CouchDB ({code}). Check the CouchDB login in Connection settings.")
+        else:
+            doc["trustValue"], doc["status"] = fake_trust, fake_status   # "~version" is left as it was
+            code, res = couch_put(s.couch1, key, doc)
+            if code in (200, 201):
+                st.warning(f"Org1's CouchDB now says {device_id} has trust {fake_trust} and is {fake_status}. "
+                           "No transaction, no endorsement, no block: a direct database edit.")
+            else:
+                st.error(f"CouchDB refused the edit ({code}): {res}")
+        st.cache_data.clear()
+
+    if write:
+        src = read_sources(device_id)
+        real = src["Ledger blocks (last committed transaction)"] or src["Org2 CouchDB"]
+        if not real:
+            st.error("Cannot read the ledger history for this device.")
+        else:
+            body = {"device_id": device_id, "trust_value": float(real["trustValue"]),
+                    "threshold": float(real["threshold"]), "reason_code": "MANUAL",
+                    "evidence": "tamper test"}
+            with st.spinner("Asking both organisations to endorse a normal trust update..."):
+                code, res = call("POST", "/v1/trust", body)
+            after = read_sources(device_id)
+            org1, org2 = after["Org1 CouchDB (edited by the attacker)"], after["Org2 CouchDB"]
+            if code != 200:
+                st.success("REFUSED. Org1's peer read the edited value and Org2's peer read the real one, so "
+                           "their endorsements did not match and no block was made. A tampered copy cannot "
+                           "be used to write anything.")
+                st.caption(f"HTTP {code}: {error_text(res)[:300]}")
+            elif same_record(org1, org2):
+                st.success("ACCEPTED, and the new block overwrote Org1's edited copy. Org1's peer still used "
+                           "the true value (Fabric keeps recent state in memory), so both endorsements matched. "
+                           "Both organisations agree again: the edit did not survive.")
+            else:
+                st.warning("ACCEPTED, but Org1's copy still differs. Use Step 3 to restore it.")
+        st.cache_data.clear()
+
+    if restore:
+        c_1, org1 = couch(s.couch1, key)
+        c_2, org2 = couch(s.couch2, key)
+        if c_1 != 200 or c_2 != 200:
+            st.error("Cannot read both CouchDBs.")
+        else:
+            fixed = {k: v for k, v in org2.items() if k != "_rev"}
+            fixed["_rev"] = org1["_rev"]
+            code, res = couch_put(s.couch1, key, fixed)
+            (st.success if code in (200, 201) else st.error)(
+                "Org1's copy restored from Org2." if code in (200, 201) else f"Restore failed ({code}): {res}")
+        st.cache_data.clear()
+
+    # ---- what every source says now ----
+    st.subheader(f"What each source says about {device_id} now")
+    src = read_sources(device_id)
+    rows = []
+    for label, rec in src.items():
+        rows.append({"Source": label,
+                     "Trust": rec.get("trustValue") if rec else "unreadable",
+                     "Threshold": rec.get("threshold") if rec else "",
+                     "Status": rec.get("status") if rec else "",
+                     "~version": rec.get("~version", "") if rec else ""})
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    org1 = src["Org1 CouchDB (edited by the attacker)"]
+    org2 = src["Org2 CouchDB"]
+    blocks = src["Ledger blocks (last committed transaction)"]
+    if same_record(org1, org2) and same_record(org1, blocks):
+        st.success("All copies agree with the blocks. Nothing has been tampered with.")
+    else:
+        if not same_record(org1, org2):
+            st.error("DETECTED: Org1's copy does not match Org2's copy.")
+        if not same_record(org1, blocks):
+            st.error("DETECTED: Org1's copy does not match the last committed block (the history database "
+                     "is built from the blocks, not from CouchDB).")
+        st.caption("The ~version did not change: the edit did not come from a transaction.")
+
+    with st.expander("Why this is tamper proof"):
+        st.markdown(
+            "- CouchDB is only a **copy of the latest state** on one server. The source of truth is the **blocks**, "
+            "which are hash-chained and held by every peer.\n"
+            "- Changing one copy does not change the other organisation's copy or the blocks, so it is caught "
+            "by comparing them.\n"
+            "- Every new write needs **both** organisations to endorse it. If one peer works on edited data the "
+            "endorsements differ and the write is refused; if it does not, the next block overwrites the edit.\n"
+            "- A peer's state can be rebuilt from the blocks at any time (`peer node rebuild-dbs`).\n"
+            "- To show the blocks are the same on both peers, run `peer channel getinfo -c ztiotchannel` "
+            "as Org1 and as Org2: same height and same current block hash.")
+
+
+# --------------------------------------------------------------------------
+
+PAGES = {
+    "Fleet overview": page_fleet, "Device detail": page_device, "Send trust value": page_send_trust,
+    "Member 1 trust engine": page_member1, "Register / move device": page_register,
+    "Security tests": page_security, "Member 4 IP lookup": page_member4, "Org1 vs Org2 (CouchDB)": page_couch,
+    "Tamper test": page_tamper,
+}
+PAGES[sidebar()]()

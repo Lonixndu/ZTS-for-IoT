@@ -93,8 +93,6 @@ func callerRole(ctx contractapi.TransactionContextInterface) string {
 }
 
 // requireRole denies by default: the caller must hold one of the listed roles.
-// Usage: requireRole(ctx, roleAdmin) or requireRole(ctx, roleTrustEngine, roleAdmin).
-// "allowed ...string" means the function takes any number of role names.
 func requireRole(ctx contractapi.TransactionContextInterface, allowed ...string) error {
 	role := callerRole(ctx)
 	for _, a := range allowed {

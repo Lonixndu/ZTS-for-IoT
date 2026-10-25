@@ -1,0 +1,4 @@
+# Dashboard only (install inside the blockchain venv, Python 3.10)
+# pandas and altair come with streamlit
+streamlit==1.39.0
+httpx==0.28.1
