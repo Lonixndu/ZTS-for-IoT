@@ -58,20 +58,24 @@ python experiments/impact_autoencoder.py --train clean=data/test.csv --train poi
 
 **Why does Layer 1 catch nothing on CICIoT2023?** Device type is derived from protocol here, so "camera + SSH" can't occur, and its rule protocols (Telnet, IRC) are always 0 in this dataset. In production, device type comes from Member 3's IP registry, independent of protocol.
 
-## Results (Member 2's data, client round 1,873,786 rows, 182,953 swaps)
+## Results (Member 2's data, client round 1,873,786 rows, 182,953 swaps — run of 25 Oct evening)
 
 | | |
 |---|---|
-| Swaps caught (recall) | **99.7%** (571 missed) |
+| Swaps caught (recall) | **99.7%** (574 missed) |
 | Precision | 90.7% |
-| Real benign kept | 57.9% |
+| Real benign kept | 57.6% |
 
 Member 2's Autoencoder retrained on each set, tested on his validation split:
 
 | Trained on | ROC AUC | Attacks caught at 5% false alarms |
 |---|---|---|
-| clean | 0.973 | 92.2% |
-| poisoned | **0.060** | 1.2% |
-| cleaned by the detector | **0.950** | 51.1% |
+| clean | 0.967 | 77.9% |
+| poisoned | **0.066** | 1.4% |
+| cleaned by the detector | **0.924** | 49.7% |
 
-**About 97% of the damage to the model's ranking ability is undone.** The remaining gap is mostly SYN floods.
+**About 95% of the damage to the model's ranking ability is undone.** The remaining gap is mostly SYN floods.
+
+> Numbers shift slightly between full rebuilds: Member 2's deduplication (DuckDB `SELECT DISTINCT`) writes rows in a
+> different order each run, so `split.py` and `attacker.py` pick different rows. An earlier rebuild gave 571 missed,
+> AUC 0.973 / 0.060 / 0.950. Detector recall is 99.7% either way; the Autoencoder's own scores vary more.
